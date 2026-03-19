@@ -1,65 +1,983 @@
-import Image from "next/image";
+"use client";
 
+import { useState, useEffect } from "react";
+import {
+  SunIcon,
+  MoonIcon,
+  Cog6ToothIcon,
+  BuildingStorefrontIcon,
+  PencilIcon,
+} from "@heroicons/react/24/outline";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  TouchSensor,
+  KeyboardSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  rectSortingStrategy,
+  useSortable,
+  arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+
+// ===================== Types =====================
+type Category = {
+  id: string;
+  name: string;
+  emoji: string;
+  colorIndex: number;
+};
+
+type Store = {
+  id: string;
+  name: string;
+};
+
+type PriceEntry = {
+  id: string;
+  storeId: string;
+  price: number;
+  memo: string;
+  date: string;
+};
+
+type Item = {
+  id: string;
+  categoryId: string;
+  name: string;
+  prices: PriceEntry[];
+};
+
+// ===================== Constants =====================
+const CATEGORY_COLORS = [
+  {
+    tab:       "bg-red-50 text-red-500 border border-red-100 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400",
+    activeTab: "bg-red-500 text-white dark:bg-red-600",
+    price:     "text-red-500 dark:text-red-400",
+    accent:    "border-l-red-400",
+  },
+  {
+    tab:       "bg-amber-50 text-amber-600 border border-amber-100 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-400",
+    activeTab: "bg-amber-500 text-white dark:bg-amber-600",
+    price:     "text-amber-600 dark:text-amber-400",
+    accent:    "border-l-amber-400",
+  },
+  {
+    tab:       "bg-blue-50 text-blue-500 border border-blue-100 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-400",
+    activeTab: "bg-blue-500 text-white dark:bg-blue-600",
+    price:     "text-blue-500 dark:text-blue-400",
+    accent:    "border-l-blue-400",
+  },
+  {
+    tab:       "bg-teal-50 text-teal-600 border border-teal-100 dark:bg-teal-900/20 dark:border-teal-800 dark:text-teal-400",
+    activeTab: "bg-teal-500 text-white dark:bg-teal-600",
+    price:     "text-teal-600 dark:text-teal-400",
+    accent:    "border-l-teal-400",
+  },
+  {
+    tab:       "bg-pink-50 text-pink-500 border border-pink-100 dark:bg-pink-900/20 dark:border-pink-800 dark:text-pink-400",
+    activeTab: "bg-pink-500 text-white dark:bg-pink-600",
+    price:     "text-pink-500 dark:text-pink-400",
+    accent:    "border-l-pink-400",
+  },
+  {
+    tab:       "bg-violet-50 text-violet-500 border border-violet-100 dark:bg-violet-900/20 dark:border-violet-800 dark:text-violet-400",
+    activeTab: "bg-violet-500 text-white dark:bg-violet-600",
+    price:     "text-violet-500 dark:text-violet-400",
+    accent:    "border-l-violet-400",
+  },
+  {
+    tab:       "bg-lime-50 text-lime-600 border border-lime-100 dark:bg-lime-900/20 dark:border-lime-800 dark:text-lime-500",
+    activeTab: "bg-lime-500 text-white dark:bg-lime-600",
+    price:     "text-lime-600 dark:text-lime-500",
+    accent:    "border-l-lime-400",
+  },
+];
+
+const DEFAULT_CATEGORIES: Category[] = [
+  { id: "cat-food",      name: "食品",   emoji: "🥩", colorIndex: 0 },
+  { id: "cat-seasoning", name: "調味料", emoji: "🧂", colorIndex: 1 },
+  { id: "cat-daily",     name: "日用品", emoji: "🧴", colorIndex: 2 },
+  { id: "cat-drink",     name: "飲料",   emoji: "🥤", colorIndex: 3 },
+  { id: "cat-snack",     name: "お菓子", emoji: "🍬", colorIndex: 4 },
+];
+
+const DEFAULT_STORES: Store[] = [
+  { id: "store-1", name: "スーパー" },
+  { id: "store-2", name: "ドラッグストア" },
+  { id: "store-3", name: "コンビニ" },
+  { id: "store-4", name: "Amazon" },
+  { id: "store-5", name: "楽天" },
+];
+
+const DEFAULT_ITEMS: Item[] = [
+  {
+    id: "item-milk", categoryId: "cat-food", name: "牛乳",
+    prices: [
+      { id: "p1", storeId: "store-1", price: 198, memo: "1L", date: "2026-03-10" },
+      { id: "p2", storeId: "store-3", price: 230, memo: "1L", date: "2026-03-10" },
+    ],
+  },
+  {
+    id: "item-egg", categoryId: "cat-food", name: "卵",
+    prices: [
+      { id: "p3", storeId: "store-1", price: 178, memo: "10個入り", date: "2026-03-11" },
+      { id: "p4", storeId: "store-2", price: 148, memo: "10個入り", date: "2026-03-12" },
+    ],
+  },
+  {
+    id: "item-bread", categoryId: "cat-food", name: "食パン",
+    prices: [
+      { id: "p5", storeId: "store-1", price: 148, memo: "6枚切り", date: "2026-03-13" },
+      { id: "p6", storeId: "store-3", price: 198, memo: "6枚切り", date: "2026-03-11" },
+    ],
+  },
+  {
+    id: "item-soy", categoryId: "cat-seasoning", name: "醤油",
+    prices: [
+      { id: "p7",  storeId: "store-1", price: 198, memo: "1L",        date: "2026-03-10" },
+      { id: "p8",  storeId: "store-4", price: 175, memo: "1L × 2本セット相当", date: "2026-03-09" },
+    ],
+  },
+  {
+    id: "item-miso", categoryId: "cat-seasoning", name: "味噌",
+    prices: [
+      { id: "p9",  storeId: "store-1", price: 298, memo: "750g", date: "2026-03-08" },
+      { id: "p10", storeId: "store-5", price: 260, memo: "750g", date: "2026-03-10" },
+    ],
+  },
+  {
+    id: "item-shampoo", categoryId: "cat-daily", name: "シャンプー",
+    prices: [
+      { id: "p11", storeId: "store-1", price: 398, memo: "450ml", date: "2026-03-08" },
+      { id: "p12", storeId: "store-2", price: 348, memo: "450ml", date: "2026-03-10" },
+      { id: "p13", storeId: "store-4", price: 320, memo: "450ml", date: "2026-03-11" },
+    ],
+  },
+  {
+    id: "item-tissue", categoryId: "cat-daily", name: "ティッシュ",
+    prices: [
+      { id: "p14", storeId: "store-1", price: 398, memo: "5箱セット", date: "2026-03-09" },
+      { id: "p15", storeId: "store-2", price: 368, memo: "5箱セット", date: "2026-03-10" },
+    ],
+  },
+  {
+    id: "item-tea", categoryId: "cat-drink", name: "お茶",
+    prices: [
+      { id: "p16", storeId: "store-3", price: 160, memo: "500ml", date: "2026-03-12" },
+      { id: "p17", storeId: "store-1", price:  88, memo: "500ml", date: "2026-03-10" },
+    ],
+  },
+  {
+    id: "item-coffee", categoryId: "cat-drink", name: "缶コーヒー",
+    prices: [
+      { id: "p18", storeId: "store-3", price: 160, memo: "185g", date: "2026-03-11" },
+      { id: "p19", storeId: "store-1", price: 110, memo: "185g", date: "2026-03-10" },
+    ],
+  },
+  {
+    id: "item-chips", categoryId: "cat-snack", name: "ポテトチップス",
+    prices: [
+      { id: "p20", storeId: "store-3", price: 160, memo: "60g", date: "2026-03-11" },
+      { id: "p21", storeId: "store-1", price: 138, memo: "60g", date: "2026-03-09" },
+    ],
+  },
+];
+
+const EMOJI_OPTIONS = ["🥬", "🍖", "🧃", "🫙", "🧹", "🛁", "💊", "🐾", "🌿", "🍳", "🥐", "🫐", "🏠", "👶", "🐶", "🎁"];
+
+const ICON_BTN = "rounded-full p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 transition-colors";
+
+function uid(): string {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+function loadData<T>(key: string, fallback: T): T {
+  const raw = localStorage.getItem(key);
+  if (!raw) return fallback;
+  try { return JSON.parse(raw); } catch { return fallback; }
+}
+
+// ===================== Main App =====================
 export default function Home() {
+  const [hydrated, setHydrated] = useState(false);
+  const [categories, setCategories] = useState<Category[]>(DEFAULT_CATEGORIES);
+  const [stores, setStores]         = useState<Store[]>(DEFAULT_STORES);
+  const [items, setItems]           = useState<Item[]>([]);
+  const [activeCategory, setActiveCategory] = useState<string>("cat-food");
+  const [editMode, setEditMode]     = useState(false);
+  const [theme, setTheme]           = useState<"light" | "dark">("light");
+
+  const [showAddDialog,    setShowAddDialog]    = useState(false);
+  const [showAddCategory,  setShowAddCategory]  = useState(false);
+  const [showStoreManager, setShowStoreManager] = useState(false);
+  const [selectedItem,     setSelectedItem]     = useState<Item | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor,   { activationConstraint: { delay: 200, tolerance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  useEffect(() => {
+    setCategories(loadData("kaimono_categories", DEFAULT_CATEGORIES));
+    setStores(    loadData("kaimono_stores",     DEFAULT_STORES));
+    setItems(     loadData("kaimono_items",      DEFAULT_ITEMS));
+    const savedTheme = localStorage.getItem("kaimono_theme") as "light" | "dark" | null;
+    const initial = savedTheme ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+    setTheme(initial);
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (theme === "dark") {
+      document.documentElement.classList.add("dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+    }
+    localStorage.setItem("kaimono_theme", theme);
+  }, [theme]);
+
+  useEffect(() => { if (hydrated) localStorage.setItem("kaimono_categories", JSON.stringify(categories)); }, [categories, hydrated]);
+  useEffect(() => { if (hydrated) localStorage.setItem("kaimono_stores",     JSON.stringify(stores));     }, [stores,     hydrated]);
+  useEffect(() => { if (hydrated) localStorage.setItem("kaimono_items",      JSON.stringify(items));      }, [items,      hydrated]);
+
+  const filteredItems = items.filter((i) => i.categoryId === activeCategory);
+  const activeCat    = categories.find((c) => c.id === activeCategory);
+  const activeColors = CATEGORY_COLORS[(activeCat?.colorIndex ?? 0) % CATEGORY_COLORS.length];
+
+  function handleItemDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setItems((prev) => {
+      const categoryItems = prev.filter((i) => i.categoryId === activeCategory);
+      const oldIndex = categoryItems.findIndex((i) => i.id === active.id);
+      const newIndex = categoryItems.findIndex((i) => i.id === over.id);
+      const reordered = arrayMove(categoryItems, oldIndex, newIndex);
+      let catIdx = 0;
+      return prev.map((item) =>
+        item.categoryId === activeCategory ? reordered[catIdx++] : item
+      );
+    });
+  }
+
+  function handleAddSubmit(itemName: string, categoryId: string, storeId: string, price: number, memo: string) {
+    const entry: PriceEntry = { id: uid(), storeId, price, memo, date: new Date().toISOString().split("T")[0] };
+    setItems((prev) => {
+      const target = prev.find((i) => i.name === itemName && i.categoryId === categoryId);
+      if (!target) return [...prev, { id: uid(), categoryId, name: itemName, prices: [entry] }];
+      return prev.map((i) => (i.id === target.id ? { ...i, prices: [...i.prices, entry] } : i));
+    });
+    setShowAddDialog(false);
+  }
+
+  function handleAddPriceForItem(itemId: string, storeId: string, price: number, memo: string) {
+    const entry: PriceEntry = { id: uid(), storeId, price, memo, date: new Date().toISOString().split("T")[0] };
+    setItems((prev) => prev.map((i) => (i.id === itemId ? { ...i, prices: [...i.prices, entry] } : i)));
+    setSelectedItem((prev) => (prev?.id === itemId ? { ...prev, prices: [...prev.prices, entry] } : prev));
+  }
+
+  function handleDeleteEntry(itemId: string, entryId: string) {
+    setItems((prev) => prev.map((i) => (i.id === itemId ? { ...i, prices: i.prices.filter((p) => p.id !== entryId) } : i)));
+    setSelectedItem((prev) => (prev?.id === itemId ? { ...prev, prices: prev.prices.filter((p) => p.id !== entryId) } : prev));
+  }
+
+  function handleDeleteItem(itemId: string) {
+    setItems((prev) => prev.filter((i) => i.id !== itemId));
+    setSelectedItem(null);
+  }
+
+  function handleDeleteStore(storeId: string) {
+    setStores((prev) => prev.filter((s) => s.id !== storeId));
+    setItems((prev) =>
+      prev.map((item) => ({ ...item, prices: item.prices.filter((p) => p.storeId !== storeId) }))
+    );
+  }
+
+  const categoryNav = (
+    <>
+      {categories.map((cat) => {
+        const colors   = CATEGORY_COLORS[cat.colorIndex % CATEGORY_COLORS.length];
+        const isActive = activeCategory === cat.id;
+        return (
+          <button
+            key={cat.id}
+            onClick={() => setActiveCategory(cat.id)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all w-full text-left ${
+              isActive ? colors.activeTab + " shadow-sm" : colors.tab + " hover:opacity-80"
+            }`}
+          >
+            <span>{cat.emoji}</span>
+            <span>{cat.name}</span>
+            {isActive && (
+              <span className="ml-auto text-xs opacity-70">{filteredItems.length}</span>
+            )}
+          </button>
+        );
+      })}
+      <button
+        onClick={() => setShowAddCategory(true)}
+        className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors w-full text-left"
+      >
+        <span className="w-5 h-5 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center text-xs">+</span>
+        <span>カテゴリ追加</span>
+      </button>
+    </>
+  );
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+
+      {/* ── Header (full-width, all screens) ── */}
+      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 backdrop-blur-md dark:bg-slate-800/90 dark:border-slate-700">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 sm:px-6">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">🛒</span>
+            <span className="text-base font-extrabold tracking-tight text-slate-900 dark:text-white">
+              かいものメモ
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              className={ICON_BTN}
+              aria-label="テーマ切り替え"
+            >
+              {theme === "dark"
+                ? <SunIcon className="h-5 w-5" />
+                : <MoonIcon className="h-5 w-5" />
+              }
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowAddCategory(true)}
+              className={ICON_BTN}
+              aria-label="カテゴリ設定"
+            >
+              <Cog6ToothIcon className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowStoreManager(true)}
+              className={ICON_BTN}
+              aria-label="店舗管理"
+            >
+              <BuildingStorefrontIcon className="h-6 w-6" />
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* ── Category tabs (mobile only) ── */}
+      <div className="md:hidden bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700">
+        <div className="flex items-center gap-2 px-4 py-2.5 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+          {categories.map((cat) => {
+            const colors   = CATEGORY_COLORS[cat.colorIndex % CATEGORY_COLORS.length];
+            const isActive = activeCategory === cat.id;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => setActiveCategory(cat.id)}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                  isActive ? colors.activeTab + " shadow-sm scale-105" : colors.tab + " hover:opacity-80"
+                }`}
+              >
+                {cat.emoji} {cat.name}
+              </button>
+            );
+          })}
+          <button
+            onClick={() => setShowAddCategory(true)}
+            className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 text-lg flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+          >
+            +
+          </button>
+        </div>
+      </div>
+
+      <div className="md:flex">
+        {/* ── Desktop sidebar ── */}
+        <aside className="hidden md:flex md:flex-col md:w-56 md:min-h-[calc(100vh-53px)] md:sticky md:top-[53px] md:h-[calc(100vh-53px)] bg-white dark:bg-slate-800 border-r border-slate-100 dark:border-slate-700 shadow-sm flex-shrink-0">
+          <nav className="flex-1 overflow-y-auto p-3 space-y-1 pt-4">{categoryNav}</nav>
+        </aside>
+
+        {/* ── Main content ── */}
+        <div className="flex-1 min-h-screen">
+          <div className="hidden md:flex items-center justify-between px-8 pt-6 pb-4">
+            <div>
+              <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
+                {activeCat?.emoji} {activeCat?.name}
+              </h2>
+              <p className="text-sm text-slate-400 dark:text-slate-500 mt-0.5">{filteredItems.length}件のアイテム</p>
+            </div>
+            {filteredItems.length > 0 && (
+              <button
+                onClick={() => setEditMode((v) => !v)}
+                className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${
+                  editMode
+                    ? "bg-amber-400 text-white shadow-sm hover:bg-amber-300"
+                    : "bg-[#22C55E] text-white shadow-sm hover:bg-green-400"
+                }`}
+              >
+                {editMode ? (
+                  <><span>✓</span> 編集完了</>
+                ) : (
+                  <><PencilIcon className="h-3.5 w-3.5" /> 並び替え</>
+                )}
+              </button>
+            )}
+          </div>
+
+          <main className="px-4 py-4 pb-28 md:px-8 md:pb-12">
+            {!hydrated ? (
+              <div className="text-center py-20 text-slate-300 dark:text-slate-600 text-sm">読み込み中...</div>
+            ) : filteredItems.length === 0 ? (
+              <div className="text-center py-24">
+                <div className="text-6xl mb-4">📦</div>
+                <p className="text-slate-400 dark:text-slate-500 text-sm">アイテムがありません</p>
+                <p className="text-slate-300 dark:text-slate-600 text-xs mt-1">右下の＋ボタンから追加してください</p>
+              </div>
+            ) : (
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleItemDragEnd}
+              >
+                <SortableContext
+                  items={filteredItems.map((i) => i.id)}
+                  strategy={rectSortingStrategy}
+                >
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {filteredItems.map((item) => (
+                      <SortableItemCard
+                        key={item.id}
+                        item={item}
+                        stores={stores}
+                        activeColors={activeColors}
+                        editMode={editMode}
+                        onClick={() => { if (!editMode) setSelectedItem(item); }}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
+            )}
+          </main>
+        </div>
+      </div>
+
+      {/* ── FAB (add) ── */}
+      <button
+        onClick={() => setShowAddDialog(true)}
+        className="fixed bottom-6 right-6 w-14 h-14 md:w-16 md:h-16 bg-gradient-to-br from-violet-500 to-purple-600 text-white rounded-full shadow-xl text-2xl md:text-3xl flex items-center justify-center hover:scale-110 active:scale-95 transition-transform z-20"
+      >
+        ＋
+      </button>
+
+      {/* ── Edit mode toggle (mobile, bottom-left) ── */}
+      {filteredItems.length > 0 && (
+        <button
+          onClick={() => setEditMode((v) => !v)}
+          className={`md:hidden fixed bottom-6 left-6 z-20 flex items-center gap-1.5 rounded-full px-4 py-2.5 text-sm font-semibold shadow-lg active:scale-95 transition-all ${
+            editMode
+              ? "bg-amber-400 text-white hover:bg-amber-300"
+              : "bg-[#22C55E] text-white hover:bg-green-400"
+          }`}
+        >
+          {editMode ? (
+            <><span>✓</span> 編集完了</>
+          ) : (
+            <><PencilIcon className="h-3.5 w-3.5" /> 並び替え</>
+          )}
+        </button>
+      )}
+
+      {/* ── Dialogs ── */}
+      {selectedItem && (
+        <PriceDetailSheet
+          item={selectedItem}
+          items={items}
+          stores={stores}
+          activeColors={activeColors}
+          onClose={() => setSelectedItem(null)}
+          onAddPrice={(storeId, price, memo) => handleAddPriceForItem(selectedItem.id, storeId, price, memo)}
+          onDeleteEntry={(entryId) => handleDeleteEntry(selectedItem.id, entryId)}
+          onDeleteItem={() => handleDeleteItem(selectedItem.id)}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+      )}
+      {showAddDialog && (
+        <AddDialog
+          categories={categories}
+          stores={stores}
+          defaultCategoryId={activeCategory}
+          onClose={() => setShowAddDialog(false)}
+          onSubmit={handleAddSubmit}
+        />
+      )}
+      {showAddCategory && (
+        <AddCategoryDialog
+          existingCount={categories.length}
+          onClose={() => setShowAddCategory(false)}
+          onSubmit={(name, emoji) => {
+            setCategories((prev) => [...prev, { id: uid(), name, emoji, colorIndex: prev.length % CATEGORY_COLORS.length }]);
+            setShowAddCategory(false);
+          }}
+        />
+      )}
+      {showStoreManager && (
+        <StoreManagerDialog
+          stores={stores}
+          onClose={() => setShowStoreManager(false)}
+          onAdd={(name) => setStores((prev) => [...prev, { id: uid(), name }])}
+          onDelete={handleDeleteStore}
+        />
+      )}
+    </div>
+  );
+}
+
+// ===================== SortableItemCard =====================
+function SortableItemCard({
+  item, stores, activeColors, editMode, onClick,
+}: {
+  item: Item;
+  stores: Store[];
+  activeColors: (typeof CATEGORY_COLORS)[0];
+  editMode: boolean;
+  onClick: () => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: item.id,
+    disabled: !editMode,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  const minPrice = item.prices.length > 0 ? Math.min(...item.prices.map((p) => p.price)) : null;
+  const minEntry = minPrice !== null ? item.prices.find((p) => p.price === minPrice) : null;
+  const minStore = minEntry ? stores.find((s) => s.id === minEntry.storeId) : null;
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`relative bg-white dark:bg-slate-800 rounded-2xl shadow-sm border-l-4 ${activeColors.accent} ${
+        isDragging ? "opacity-50 shadow-lg scale-105" : "hover:shadow-md dark:hover:shadow-slate-900/50"
+      } transition-all`}
+    >
+      <button
+        onClick={onClick}
+        disabled={editMode}
+        className="w-full text-left p-4 pr-10 active:scale-95 transition-transform disabled:active:scale-100"
+      >
+        <div className="flex items-start justify-between gap-2">
+          <span className="font-semibold text-slate-700 dark:text-slate-200 text-base leading-tight">{item.name}</span>
+          <div className="text-right flex-shrink-0">
+            {minPrice !== null ? (
+              <>
+                <div className={`text-xl font-bold ${activeColors.price}`}>
+                  ¥{minPrice.toLocaleString()}
+                </div>
+                {minStore && <div className="text-xs text-slate-400 dark:text-slate-500">{minStore.name}</div>}
+              </>
+            ) : (
+              <span className="text-sm text-slate-300 dark:text-slate-600">未登録</span>
+            )}
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+        <div className="mt-2 text-xs text-slate-300 dark:text-slate-600">
+          {item.prices.length > 0 ? `${item.prices.length}件の価格情報 →` : "価格を追加してください"}
         </div>
-      </main>
+      </button>
+      {editMode && (
+        <div
+          {...attributes}
+          {...listeners}
+          className="absolute right-2 top-1/2 -translate-y-1/2 p-2 text-slate-300 dark:text-slate-500 hover:text-slate-500 dark:hover:text-slate-300 cursor-grab active:cursor-grabbing touch-none"
+        >
+          <svg viewBox="0 0 20 20" className="h-5 w-5 fill-current">
+            <circle cx="7"  cy="5"  r="1.5"/>
+            <circle cx="13" cy="5"  r="1.5"/>
+            <circle cx="7"  cy="10" r="1.5"/>
+            <circle cx="13" cy="10" r="1.5"/>
+            <circle cx="7"  cy="15" r="1.5"/>
+            <circle cx="13" cy="15" r="1.5"/>
+          </svg>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===================== PriceDetailSheet =====================
+function PriceDetailSheet({
+  item, items, stores, activeColors, onClose, onAddPrice, onDeleteEntry, onDeleteItem,
+}: {
+  item: Item;
+  items: Item[];
+  stores: Store[];
+  activeColors: (typeof CATEGORY_COLORS)[0];
+  onClose: () => void;
+  onAddPrice: (storeId: string, price: number, memo: string) => void;
+  onDeleteEntry: (entryId: string) => void;
+  onDeleteItem: () => void;
+}) {
+  const [showForm, setShowForm] = useState(false);
+  const [storeId, setStoreId]   = useState(stores[0]?.id ?? "");
+  const [price,   setPrice]     = useState("");
+  const [memo,    setMemo]      = useState("");
+
+  const currentItem  = items.find((i) => i.id === item.id) ?? item;
+  const sortedPrices = [...currentItem.prices].sort((a, b) => a.price - b.price);
+
+  function handleAdd(e: React.SyntheticEvent) {
+    e.preventDefault();
+    const p = parseInt(price);
+    if (!p || !storeId) return;
+    onAddPrice(storeId, p, memo);
+    setPrice(""); setMemo(""); setShowForm(false);
+  }
+
+  return (
+    <div className="fixed inset-0 z-40 flex flex-col justify-end md:items-center md:justify-center md:p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-white dark:bg-slate-800 rounded-t-3xl md:rounded-3xl max-h-[85vh] flex flex-col z-10 shadow-2xl w-full md:max-w-lg">
+        <div className="flex justify-center pt-3 pb-1 md:hidden">
+          <div className="w-10 h-1 bg-slate-200 dark:bg-slate-600 rounded-full" />
+        </div>
+        <div className="flex items-center justify-between px-5 py-4">
+          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">{currentItem.name}</h2>
+          <div className="flex items-center gap-2">
+            <button onClick={onDeleteItem} className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+              削除
+            </button>
+            <button onClick={onClose} className="text-slate-300 dark:text-slate-500 hover:text-slate-500 dark:hover:text-slate-300 text-xl p-1">✕</button>
+          </div>
+        </div>
+
+        <div className="overflow-y-auto flex-1 px-5">
+          {sortedPrices.length === 0 ? (
+            <div className="text-center py-8 text-slate-400 dark:text-slate-500 text-sm">価格情報がありません</div>
+          ) : (
+            <div className="space-y-2 pb-2">
+              {sortedPrices.map((entry, i) => {
+                const store      = stores.find((s) => s.id === entry.storeId);
+                const isCheapest = i === 0;
+                return (
+                  <div
+                    key={entry.id}
+                    className={`flex items-center justify-between p-3 rounded-xl ${
+                      isCheapest
+                        ? "bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600"
+                        : "bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700"
+                    }`}
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium text-slate-700 dark:text-slate-200">{store?.name ?? "不明"}</span>
+                        {isCheapest && (
+                          <span className="text-xs bg-amber-400 text-amber-900 px-1.5 py-0.5 rounded-full font-medium">最安</span>
+                        )}
+                      </div>
+                      {entry.memo && <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{entry.memo}</div>}
+                      <div className="text-xs text-slate-300 dark:text-slate-600 mt-0.5">{entry.date}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-lg font-bold ${isCheapest ? activeColors.price : "text-slate-500 dark:text-slate-400"}`}>
+                        ¥{entry.price.toLocaleString()}
+                      </span>
+                      <button onClick={() => onDeleteEntry(entry.id)} className="text-slate-200 dark:text-slate-600 hover:text-red-400 transition-colors p-1">✕</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {showForm && (
+            <form onSubmit={handleAdd} className="mt-3 bg-slate-50 dark:bg-slate-700/50 rounded-2xl p-4 space-y-3 mb-2">
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">店舗</label>
+                <select value={storeId} onChange={(e) => setStoreId(e.target.value)}
+                  className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200">
+                  {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">金額（円）</label>
+                <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="例: 198" min="0" required
+                  className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">メモ（任意）</label>
+                <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="例: 500ml × 6本"
+                  className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
+              </div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setShowForm(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                  キャンセル
+                </button>
+                <button type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white text-sm font-semibold">
+                  追加
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
+
+        {!showForm && (
+          <div className="px-5 py-4">
+            <button onClick={() => setShowForm(true)}
+              className="w-full py-3 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-600 text-slate-400 dark:text-slate-500 text-sm hover:border-violet-300 dark:hover:border-violet-600 hover:text-violet-500 dark:hover:text-violet-400 transition-colors">
+              ＋ 価格を追加
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ===================== AddDialog =====================
+function AddDialog({
+  categories, stores, defaultCategoryId, onClose, onSubmit,
+}: {
+  categories: Category[];
+  stores: Store[];
+  defaultCategoryId: string;
+  onClose: () => void;
+  onSubmit: (itemName: string, categoryId: string, storeId: string, price: number, memo: string) => void;
+}) {
+  const [categoryId,  setCategoryId]  = useState(defaultCategoryId);
+  const [itemName,    setItemName]    = useState("");
+  const [storeId,     setStoreId]     = useState(stores[0]?.id ?? "");
+  const [price,       setPrice]       = useState("");
+  const [memo,        setMemo]        = useState("");
+
+  function handleSubmit(e: React.SyntheticEvent) {
+    e.preventDefault();
+    const p = parseInt(price);
+    if (!itemName.trim() || !storeId || !p) return;
+    onSubmit(itemName.trim(), categoryId, storeId, p, memo);
+  }
+
+  return (
+    <div className="fixed inset-0 z-40 flex flex-col justify-end md:items-center md:justify-center md:p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-white dark:bg-slate-800 rounded-t-3xl md:rounded-3xl z-10 shadow-2xl w-full md:max-w-lg">
+        <div className="flex justify-center pt-3 pb-1 md:hidden">
+          <div className="w-10 h-1 bg-slate-200 dark:bg-slate-600 rounded-full" />
+        </div>
+        <div className="flex items-center justify-between px-5 py-4">
+          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">価格を記録</h2>
+          <button onClick={onClose} className="text-slate-300 dark:text-slate-500 hover:text-slate-500 dark:hover:text-slate-300 text-xl p-1">✕</button>
+        </div>
+        <form onSubmit={handleSubmit} className="px-5 pb-8 space-y-4">
+          {/* カテゴリを先頭に */}
+          <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">カテゴリ</label>
+            <div className="flex gap-2 flex-wrap mt-1.5">
+              {categories.map((cat) => {
+                const colors = CATEGORY_COLORS[cat.colorIndex % CATEGORY_COLORS.length];
+                return (
+                  <button key={cat.id} type="button" onClick={() => setCategoryId(cat.id)}
+                    className={`px-3 py-1.5 rounded-full text-sm transition-all ${categoryId === cat.id ? colors.activeTab + " shadow-sm" : colors.tab + " hover:opacity-80"}`}>
+                    {cat.emoji} {cat.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">商品名</label>
+            <input type="text" value={itemName} onChange={(e) => setItemName(e.target.value)} placeholder="例: 牛乳" required autoFocus
+              className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">店舗</label>
+            <select value={storeId} onChange={(e) => setStoreId(e.target.value)} required
+              className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200">
+              {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">金額（円）</label>
+            <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="例: 198" required min="0"
+              className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">メモ（任意）</label>
+            <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="例: 1L、特売品"
+              className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
+          </div>
+          <button type="submit"
+            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-violet-500 to-purple-600 text-white font-semibold text-base shadow-md hover:shadow-lg transition-shadow">
+            追加する
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ===================== AddCategoryDialog =====================
+function AddCategoryDialog({
+  existingCount, onClose, onSubmit,
+}: {
+  existingCount: number;
+  onClose: () => void;
+  onSubmit: (name: string, emoji: string) => void;
+}) {
+  const [name,  setName]  = useState("");
+  const [emoji, setEmoji] = useState("🏷️");
+
+  function handleSubmit(e: React.SyntheticEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    onSubmit(name.trim(), emoji);
+  }
+
+  const previewColor = CATEGORY_COLORS[existingCount % CATEGORY_COLORS.length];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-white dark:bg-slate-800 rounded-3xl p-6 w-full max-w-sm z-10 shadow-2xl">
+        <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4">カテゴリを追加</h2>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">絵文字を選ぶ</label>
+            <div className="grid grid-cols-8 gap-1.5 mt-1.5">
+              {EMOJI_OPTIONS.map((e) => (
+                <button key={e} type="button" onClick={() => setEmoji(e)}
+                  className={`text-xl p-1.5 rounded-xl transition-all ${emoji === e ? "bg-violet-100 dark:bg-violet-900/40 scale-110 shadow-sm" : "hover:bg-slate-100 dark:hover:bg-slate-700"}`}>
+                  {e}
+                </button>
+              ))}
+            </div>
+            <input type="text" value={emoji} onChange={(e) => setEmoji(e.target.value)} placeholder="カスタム絵文字" maxLength={2}
+              className="w-full mt-2 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200" />
+          </div>
+          <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">カテゴリ名</label>
+            <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="例: 冷凍食品" required autoFocus
+              className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
+          </div>
+          {name && (
+            <div className="flex justify-center">
+              <span className={`px-3 py-1.5 rounded-full text-sm font-medium ${previewColor.activeTab}`}>{emoji} {name}</span>
+            </div>
+          )}
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+              キャンセル
+            </button>
+            <button type="submit"
+              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white text-sm font-semibold">
+              追加
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ===================== StoreManagerDialog =====================
+function StoreManagerDialog({
+  stores, onClose, onAdd, onDelete,
+}: {
+  stores: Store[];
+  onClose: () => void;
+  onAdd: (name: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [newName, setNewName] = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  function handleAdd(e: React.SyntheticEvent) {
+    e.preventDefault();
+    if (!newName.trim()) return;
+    onAdd(newName.trim());
+    setNewName("");
+  }
+
+  const confirmStore = stores.find((s) => s.id === confirmDeleteId);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-white dark:bg-slate-800 rounded-3xl p-6 w-full max-w-sm z-10 shadow-2xl max-h-[80vh] flex flex-col">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">店舗管理</h2>
+          <button onClick={onClose} className="text-slate-300 dark:text-slate-500 hover:text-slate-500 dark:hover:text-slate-300 text-xl p-1">✕</button>
+        </div>
+        <div className="overflow-y-auto flex-1 space-y-2 mb-4">
+          {stores.length === 0 ? (
+            <p className="text-sm text-slate-400 dark:text-slate-500 text-center py-4">店舗がありません</p>
+          ) : (
+            stores.map((store) => (
+              <div key={store.id} className="flex items-center justify-between bg-slate-50 dark:bg-slate-700/50 rounded-xl px-4 py-2.5">
+                <span className="text-sm text-slate-700 dark:text-slate-200">{store.name}</span>
+                <button
+                  onClick={() => setConfirmDeleteId(store.id)}
+                  className="text-slate-300 dark:text-slate-500 hover:text-red-400 transition-colors p-1"
+                >
+                  ✕
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+        <form onSubmit={handleAdd} className="flex gap-2">
+          <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="新しい店舗名"
+            className="flex-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500" />
+          <button type="submit"
+            className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white text-sm font-semibold">
+            追加
+          </button>
+        </form>
+
+        {/* Confirmation overlay */}
+        {confirmDeleteId && (
+          <div className="absolute inset-0 bg-white dark:bg-slate-800 rounded-3xl flex flex-col items-center justify-center p-6 gap-4">
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 text-center">
+              「{confirmStore?.name}」を削除してよろしいですか？
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 text-center leading-relaxed">
+              店舗に紐づくすべての商品が削除されます。
+            </p>
+            <div className="flex gap-3 w-full">
+              <button
+                onClick={() => setConfirmDeleteId(null)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+              >
+                キャンセル
+              </button>
+              <button
+                onClick={() => { onDelete(confirmDeleteId); setConfirmDeleteId(null); }}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors"
+              >
+                削除
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
