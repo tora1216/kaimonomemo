@@ -9,27 +9,16 @@ export default function AppleIcon() {
     (
       <div
         style={{
-          background: "white",
+          background: "#000000",
+          borderRadius: "110px",
           width: "100%",
           height: "100%",
           display: "flex",
-          flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          gap: 12,
         }}
       >
-        <div style={{ fontSize: 300, lineHeight: 1 }}>🐯</div>
-        <div
-          style={{
-            fontSize: 56,
-            fontWeight: "bold",
-            color: "black",
-            letterSpacing: "-1px",
-          }}
-        >
-          買い物アプリ
-        </div>
+        <div style={{ fontSize: 340, lineHeight: 1, marginTop: "-30px" }}>📝</div>
       </div>
     ),
     { ...size }

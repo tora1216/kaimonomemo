@@ -15,10 +15,10 @@ export default function Icon() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          fontSize: 24,
+          fontSize: 26,
         }}
       >
-        🐯
+        📝
       </div>
     ),
     { ...size }

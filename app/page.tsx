@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   SunIcon,
   MoonIcon,
   Cog6ToothIcon,
   BuildingStorefrontIcon,
   PencilIcon,
+  ArrowUpOnSquareIcon,
 } from "@heroicons/react/24/outline";
 import {
   DndContext,
@@ -26,184 +27,11 @@ import {
   arrayMove,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-
-// ===================== Types =====================
-type Category = {
-  id: string;
-  name: string;
-  emoji: string;
-  colorIndex: number;
-};
-
-type Store = {
-  id: string;
-  name: string;
-};
-
-type PriceEntry = {
-  id: string;
-  storeId: string;
-  price: number;
-  memo: string;
-  date: string;
-};
-
-type Item = {
-  id: string;
-  categoryId: string;
-  name: string;
-  prices: PriceEntry[];
-};
-
-// ===================== Constants =====================
-const CATEGORY_COLORS = [
-  {
-    tab:       "bg-red-50 text-red-500 border border-red-100 dark:bg-red-900/20 dark:border-red-800 dark:text-red-400",
-    activeTab: "bg-red-500 text-white dark:bg-red-600",
-    price:     "text-red-500 dark:text-red-400",
-    accent:    "border-l-red-400",
-  },
-  {
-    tab:       "bg-amber-50 text-amber-600 border border-amber-100 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-400",
-    activeTab: "bg-amber-500 text-white dark:bg-amber-600",
-    price:     "text-amber-600 dark:text-amber-400",
-    accent:    "border-l-amber-400",
-  },
-  {
-    tab:       "bg-blue-50 text-blue-500 border border-blue-100 dark:bg-blue-900/20 dark:border-blue-800 dark:text-blue-400",
-    activeTab: "bg-blue-500 text-white dark:bg-blue-600",
-    price:     "text-blue-500 dark:text-blue-400",
-    accent:    "border-l-blue-400",
-  },
-  {
-    tab:       "bg-teal-50 text-teal-600 border border-teal-100 dark:bg-teal-900/20 dark:border-teal-800 dark:text-teal-400",
-    activeTab: "bg-teal-500 text-white dark:bg-teal-600",
-    price:     "text-teal-600 dark:text-teal-400",
-    accent:    "border-l-teal-400",
-  },
-  {
-    tab:       "bg-pink-50 text-pink-500 border border-pink-100 dark:bg-pink-900/20 dark:border-pink-800 dark:text-pink-400",
-    activeTab: "bg-pink-500 text-white dark:bg-pink-600",
-    price:     "text-pink-500 dark:text-pink-400",
-    accent:    "border-l-pink-400",
-  },
-  {
-    tab:       "bg-violet-50 text-violet-500 border border-violet-100 dark:bg-violet-900/20 dark:border-violet-800 dark:text-violet-400",
-    activeTab: "bg-violet-500 text-white dark:bg-violet-600",
-    price:     "text-violet-500 dark:text-violet-400",
-    accent:    "border-l-violet-400",
-  },
-  {
-    tab:       "bg-lime-50 text-lime-600 border border-lime-100 dark:bg-lime-900/20 dark:border-lime-800 dark:text-lime-500",
-    activeTab: "bg-lime-500 text-white dark:bg-lime-600",
-    price:     "text-lime-600 dark:text-lime-500",
-    accent:    "border-l-lime-400",
-  },
-];
-
-const DEFAULT_CATEGORIES: Category[] = [
-  { id: "cat-food",      name: "食品",   emoji: "🥩", colorIndex: 0 },
-  { id: "cat-seasoning", name: "調味料", emoji: "🧂", colorIndex: 1 },
-  { id: "cat-daily",     name: "日用品", emoji: "🧴", colorIndex: 2 },
-  { id: "cat-drink",     name: "飲料",   emoji: "🥤", colorIndex: 3 },
-  { id: "cat-snack",     name: "お菓子", emoji: "🍬", colorIndex: 4 },
-];
-
-const DEFAULT_STORES: Store[] = [
-  { id: "store-1", name: "スーパー" },
-  { id: "store-2", name: "ドラッグストア" },
-  { id: "store-3", name: "コンビニ" },
-  { id: "store-4", name: "Amazon" },
-  { id: "store-5", name: "楽天" },
-];
-
-const DEFAULT_ITEMS: Item[] = [
-  {
-    id: "item-milk", categoryId: "cat-food", name: "牛乳",
-    prices: [
-      { id: "p1", storeId: "store-1", price: 198, memo: "1L", date: "2026-03-10" },
-      { id: "p2", storeId: "store-3", price: 230, memo: "1L", date: "2026-03-10" },
-    ],
-  },
-  {
-    id: "item-egg", categoryId: "cat-food", name: "卵",
-    prices: [
-      { id: "p3", storeId: "store-1", price: 178, memo: "10個入り", date: "2026-03-11" },
-      { id: "p4", storeId: "store-2", price: 148, memo: "10個入り", date: "2026-03-12" },
-    ],
-  },
-  {
-    id: "item-bread", categoryId: "cat-food", name: "食パン",
-    prices: [
-      { id: "p5", storeId: "store-1", price: 148, memo: "6枚切り", date: "2026-03-13" },
-      { id: "p6", storeId: "store-3", price: 198, memo: "6枚切り", date: "2026-03-11" },
-    ],
-  },
-  {
-    id: "item-soy", categoryId: "cat-seasoning", name: "醤油",
-    prices: [
-      { id: "p7",  storeId: "store-1", price: 198, memo: "1L",        date: "2026-03-10" },
-      { id: "p8",  storeId: "store-4", price: 175, memo: "1L × 2本セット相当", date: "2026-03-09" },
-    ],
-  },
-  {
-    id: "item-miso", categoryId: "cat-seasoning", name: "味噌",
-    prices: [
-      { id: "p9",  storeId: "store-1", price: 298, memo: "750g", date: "2026-03-08" },
-      { id: "p10", storeId: "store-5", price: 260, memo: "750g", date: "2026-03-10" },
-    ],
-  },
-  {
-    id: "item-shampoo", categoryId: "cat-daily", name: "シャンプー",
-    prices: [
-      { id: "p11", storeId: "store-1", price: 398, memo: "450ml", date: "2026-03-08" },
-      { id: "p12", storeId: "store-2", price: 348, memo: "450ml", date: "2026-03-10" },
-      { id: "p13", storeId: "store-4", price: 320, memo: "450ml", date: "2026-03-11" },
-    ],
-  },
-  {
-    id: "item-tissue", categoryId: "cat-daily", name: "ティッシュ",
-    prices: [
-      { id: "p14", storeId: "store-1", price: 398, memo: "5箱セット", date: "2026-03-09" },
-      { id: "p15", storeId: "store-2", price: 368, memo: "5箱セット", date: "2026-03-10" },
-    ],
-  },
-  {
-    id: "item-tea", categoryId: "cat-drink", name: "お茶",
-    prices: [
-      { id: "p16", storeId: "store-3", price: 160, memo: "500ml", date: "2026-03-12" },
-      { id: "p17", storeId: "store-1", price:  88, memo: "500ml", date: "2026-03-10" },
-    ],
-  },
-  {
-    id: "item-coffee", categoryId: "cat-drink", name: "缶コーヒー",
-    prices: [
-      { id: "p18", storeId: "store-3", price: 160, memo: "185g", date: "2026-03-11" },
-      { id: "p19", storeId: "store-1", price: 110, memo: "185g", date: "2026-03-10" },
-    ],
-  },
-  {
-    id: "item-chips", categoryId: "cat-snack", name: "ポテトチップス",
-    prices: [
-      { id: "p20", storeId: "store-3", price: 160, memo: "60g", date: "2026-03-11" },
-      { id: "p21", storeId: "store-1", price: 138, memo: "60g", date: "2026-03-09" },
-    ],
-  },
-];
-
-const EMOJI_OPTIONS = ["🥬", "🍖", "🧃", "🫙", "🧹", "🛁", "💊", "🐾", "🌿", "🍳", "🥐", "🫐", "🏠", "👶", "🐶", "🎁"];
-
-const ICON_BTN = "rounded-full p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 transition-colors";
-
-function uid(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-}
-
-function loadData<T>(key: string, fallback: T): T {
-  const raw = localStorage.getItem(key);
-  if (!raw) return fallback;
-  try { return JSON.parse(raw); } catch { return fallback; }
-}
+import type { Category, Store, Item, PriceEntry } from "@/lib/types";
+import { CATEGORY_COLORS, EMOJI_OPTIONS, ICON_BTN } from "@/lib/constants";
+import { DEFAULT_CATEGORIES, DEFAULT_STORES, DEFAULT_ITEMS } from "@/lib/defaultData";
+import { uid, loadData } from "@/lib/utils";
+import { APP_VERSION, CHANGELOG } from "@/lib/changelog";
 
 // ===================== Main App =====================
 export default function Home() {
@@ -218,6 +46,7 @@ export default function Home() {
   const [showAddDialog,    setShowAddDialog]    = useState(false);
   const [showAddCategory,  setShowAddCategory]  = useState(false);
   const [showStoreManager, setShowStoreManager] = useState(false);
+  const [showSettings,     setShowSettings]     = useState(false);
   const [selectedItem,     setSelectedItem]     = useState<Item | null>(null);
 
   const sensors = useSensors(
@@ -339,9 +168,9 @@ export default function Home() {
       <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 backdrop-blur-md dark:bg-slate-800/90 dark:border-slate-700">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 sm:px-6">
           <div className="flex items-center gap-2">
-            <span className="text-xl">🛒</span>
+            <span className="text-xl">🐯</span>
             <span className="text-base font-extrabold tracking-tight text-slate-900 dark:text-white">
-              かいものメモ
+              買い物メモ
             </span>
           </div>
           <div className="flex items-center gap-1">
@@ -358,9 +187,9 @@ export default function Home() {
             </button>
             <button
               type="button"
-              onClick={() => setShowAddCategory(true)}
+              onClick={() => setShowSettings(true)}
               className={ICON_BTN}
-              aria-label="カテゴリ設定"
+              aria-label="設定"
             >
               <Cog6ToothIcon className="h-5 w-5" />
             </button>
@@ -540,6 +369,9 @@ export default function Home() {
           onDelete={handleDeleteStore}
         />
       )}
+      {showSettings && (
+        <SettingsDialog onClose={() => setShowSettings(false)} />
+      )}
     </div>
   );
 }
@@ -550,7 +382,7 @@ function SortableItemCard({
 }: {
   item: Item;
   stores: Store[];
-  activeColors: (typeof CATEGORY_COLORS)[0];
+  activeColors: (typeof CATEGORY_COLORS)[number];
   editMode: boolean;
   onClick: () => void;
 }) {
@@ -579,25 +411,25 @@ function SortableItemCard({
       <button
         onClick={onClick}
         disabled={editMode}
-        className="w-full text-left p-4 pr-10 active:scale-95 transition-transform disabled:active:scale-100"
+        className="w-full text-left px-3 py-2 pr-9 active:scale-95 transition-transform disabled:active:scale-100"
       >
-        <div className="flex items-start justify-between gap-2">
-          <span className="font-semibold text-slate-700 dark:text-slate-200 text-base leading-tight">{item.name}</span>
-          <div className="text-right flex-shrink-0">
-            {minPrice !== null ? (
-              <>
-                <div className={`text-xl font-bold ${activeColors.price}`}>
-                  ¥{minPrice.toLocaleString()}
-                </div>
-                {minStore && <div className="text-xs text-slate-400 dark:text-slate-500">{minStore.name}</div>}
-              </>
-            ) : (
-              <span className="text-sm text-slate-300 dark:text-slate-600">未登録</span>
-            )}
-          </div>
+        <div className="flex items-center justify-between gap-2">
+          <span className="font-semibold text-slate-700 dark:text-slate-200 text-sm truncate flex-1">{item.name}</span>
+          {minPrice !== null ? (
+            <span className={`text-sm font-bold flex-shrink-0 ${activeColors.price}`}>
+              ¥{minPrice.toLocaleString()}
+            </span>
+          ) : (
+            <span className="text-xs text-slate-300 dark:text-slate-600 flex-shrink-0">未登録</span>
+          )}
         </div>
-        <div className="mt-2 text-xs text-slate-300 dark:text-slate-600">
-          {item.prices.length > 0 ? `${item.prices.length}件の価格情報 →` : "価格を追加してください"}
+        <div className="flex items-center justify-between mt-0.5">
+          <span className="text-xs text-slate-300 dark:text-slate-600">
+            {item.prices.length > 0 ? `${item.prices.length}件 →` : "価格を追加"}
+          </span>
+          {minStore && (
+            <span className="text-xs text-slate-400 dark:text-slate-500">{minStore.name}</span>
+          )}
         </div>
       </button>
       {editMode && (
@@ -627,7 +459,7 @@ function PriceDetailSheet({
   item: Item;
   items: Item[];
   stores: Store[];
-  activeColors: (typeof CATEGORY_COLORS)[0];
+  activeColors: (typeof CATEGORY_COLORS)[number];
   onClose: () => void;
   onAddPrice: (storeId: string, price: number, memo: string) => void;
   onDeleteEntry: (entryId: string) => void;
@@ -843,6 +675,11 @@ function AddCategoryDialog({
 }) {
   const [name,  setName]  = useState("");
   const [emoji, setEmoji] = useState("🏷️");
+  const nameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    nameRef.current?.focus({ preventScroll: true });
+  }, []);
 
   function handleSubmit(e: React.SyntheticEvent) {
     e.preventDefault();
@@ -873,7 +710,7 @@ function AddCategoryDialog({
           </div>
           <div>
             <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">カテゴリ名</label>
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="例: 冷凍食品" required autoFocus
+            <input ref={nameRef} type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="例: 冷凍食品" required
               className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
           </div>
           {name && (
@@ -892,6 +729,122 @@ function AddCategoryDialog({
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  );
+}
+
+// ===================== SettingsDialog =====================
+function SettingsDialog({ onClose }: { onClose: () => void }) {
+  const [isIOS,       setIsIOS]       = useState(false);
+  const [isInstalled, setIsInstalled] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<Event & { prompt: () => void; userChoice: Promise<{ outcome: string }> } | null>(null);
+
+  useEffect(() => {
+    setIsIOS(/iPad|iPhone|iPod/.test(navigator.userAgent));
+    setIsInstalled(
+      window.matchMedia("(display-mode: standalone)").matches ||
+      !!(navigator as unknown as { standalone?: boolean }).standalone
+    );
+    const handler = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e as Event & { prompt: () => void; userChoice: Promise<{ outcome: string }> });
+    };
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
+  async function handleInstall() {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    setDeferredPrompt(null);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-white dark:bg-slate-800 rounded-3xl w-full max-w-sm z-10 shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-700">
+          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">設定</h2>
+          <button onClick={onClose} className="text-slate-300 dark:text-slate-500 hover:text-slate-500 dark:hover:text-slate-300 text-xl p-1">✕</button>
+        </div>
+        <div className="p-5 space-y-4 overflow-y-auto max-h-[75vh]">
+          {/* アップデート情報 */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <span className="text-sm font-bold text-slate-800 dark:text-white">アップデート情報</span>
+              <span className="rounded-full bg-slate-100 dark:bg-slate-700 px-2.5 py-0.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                v{APP_VERSION}
+              </span>
+            </div>
+            <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+              {CHANGELOG.map((entry, i) => (
+                <div key={entry.version}>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                      i === 0
+                        ? "bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-400"
+                        : "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
+                    }`}>
+                      v{entry.version}
+                    </span>
+                    <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{entry.title}</span>
+                    <span className="ml-auto text-[10px] text-slate-400">{entry.date}</span>
+                  </div>
+                  <ul className="space-y-0.5 pl-2">
+                    {entry.changes.map((c, j) => (
+                      <li key={j} className="flex items-start gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+                        <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-slate-300 dark:bg-slate-600" />
+                        {c}
+                      </li>
+                    ))}
+                  </ul>
+                  {i < CHANGELOG.length - 1 && (
+                    <div className="mt-3 border-b border-slate-100 dark:border-slate-700" />
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* ホーム画面に追加 */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <ArrowUpOnSquareIcon className="h-5 w-5 text-slate-500 dark:text-slate-400" />
+              <span className="text-sm font-bold text-slate-800 dark:text-white">ホーム画面に追加</span>
+            </div>
+            {isInstalled ? (
+              <p className="text-sm text-slate-500 dark:text-slate-400">すでにホーム画面に追加されています。</p>
+            ) : isIOS ? (
+              <ol className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                <li className="flex items-start gap-2">
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300">1</span>
+                  <span>画面下部の共有ボタン（<ArrowUpOnSquareIcon className="h-3.5 w-3.5 inline" />）をタップ</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300">2</span>
+                  <span>「ホーム画面に追加」を選択</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300">3</span>
+                  <span>「追加」をタップして完了</span>
+                </li>
+              </ol>
+            ) : deferredPrompt ? (
+              <button
+                onClick={handleInstall}
+                className="w-full rounded-xl bg-[#22C55E] py-2.5 text-sm font-semibold text-white transition hover:bg-green-400"
+              >
+                ホーム画面にインストール
+              </button>
+            ) : (
+              <p className="text-sm text-slate-500 dark:text-slate-400">
+                ブラウザのメニューから「ホーム画面に追加」を選択してください。
+              </p>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
