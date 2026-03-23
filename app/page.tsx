@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import {
   SunIcon,
   MoonIcon,
@@ -45,9 +45,9 @@ export default function Home() {
   const [editMode, setEditMode]     = useState(false);
   const [theme, setTheme]           = useState<"light" | "dark">("light");
 
-  const [showAddDialog,    setShowAddDialog]    = useState(false);
-  const [showAddCategory,  setShowAddCategory]  = useState(false);
-  const [showStoreManager, setShowStoreManager] = useState(false);
+  const [showAddDialog,       setShowAddDialog]       = useState(false);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
+  const [showStoreManager,    setShowStoreManager]    = useState(false);
   const [showSettings,     setShowSettings]     = useState(false);
   const [showShoppingList, setShowShoppingList] = useState(false);
   const [selectedItem,     setSelectedItem]     = useState<Item | null>(null);
@@ -160,7 +160,7 @@ export default function Home() {
         );
       })}
       <button
-        onClick={() => setShowAddCategory(true)}
+        onClick={() => setShowCategoryManager(true)}
         className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors w-full text-left"
       >
         <span className="w-5 h-5 rounded-full border-2 border-dashed border-slate-300 dark:border-slate-600 flex items-center justify-center text-xs">+</span>
@@ -245,7 +245,7 @@ export default function Home() {
             );
           })}
           <button
-            onClick={() => setShowAddCategory(true)}
+            onClick={() => setShowCategoryManager(true)}
             className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 text-lg flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
           >
             +
@@ -372,13 +372,24 @@ export default function Home() {
           onSubmit={handleAddSubmit}
         />
       )}
-      {showAddCategory && (
-        <AddCategoryDialog
-          existingCount={categories.length}
-          onClose={() => setShowAddCategory(false)}
-          onSubmit={(name, emoji) => {
-            setCategories((prev) => [...prev, { id: uid(), name, emoji, colorIndex: prev.length % CATEGORY_COLORS.length }]);
-            setShowAddCategory(false);
+      {showCategoryManager && (
+        <CategoryManagerDialog
+          categories={categories}
+          items={items}
+          onClose={() => setShowCategoryManager(false)}
+          onAdd={(name: string, emoji: string) =>
+            setCategories((prev) => [...prev, { id: uid(), name, emoji, colorIndex: prev.length % CATEGORY_COLORS.length }])
+          }
+          onEdit={(id: string, name: string, emoji: string) =>
+            setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, name, emoji } : c)))
+          }
+          onDelete={(id: string) => {
+            setCategories((prev) => {
+              const updated = prev.filter((c) => c.id !== id);
+              if (activeCategory === id) setActiveCategory(updated[0]?.id ?? "");
+              return updated;
+            });
+            setItems((prev) => prev.filter((i) => i.categoryId !== id));
           }}
         />
       )}
@@ -743,70 +754,175 @@ function AddDialog({
   );
 }
 
-// ===================== AddCategoryDialog =====================
-function AddCategoryDialog({
-  existingCount, onClose, onSubmit,
+// ===================== CategoryManagerDialog =====================
+function CategoryManagerDialog({
+  categories, items, onClose, onAdd, onEdit, onDelete,
 }: {
-  existingCount: number;
+  categories: Category[];
+  items: Item[];
   onClose: () => void;
-  onSubmit: (name: string, emoji: string) => void;
+  onAdd: (name: string, emoji: string) => void;
+  onEdit: (id: string, name: string, emoji: string) => void;
+  onDelete: (id: string) => void;
 }) {
-  const [name,  setName]  = useState("");
-  const [emoji, setEmoji] = useState("🏷️");
-  const nameRef = useRef<HTMLInputElement>(null);
+  const [editingId,       setEditingId]       = useState<string | null>(null);
+  const [editName,        setEditName]        = useState("");
+  const [editEmoji,       setEditEmoji]       = useState("");
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [showAddForm,     setShowAddForm]     = useState(false);
+  const [newName,         setNewName]         = useState("");
+  const [newEmoji,        setNewEmoji]        = useState("🏷️");
 
-  useEffect(() => {
-    nameRef.current?.focus({ preventScroll: true });
-  }, []);
-
-  function handleSubmit(e: React.SyntheticEvent) {
-    e.preventDefault();
-    if (!name.trim()) return;
-    onSubmit(name.trim(), emoji);
+  function startEdit(cat: Category) {
+    setEditingId(cat.id);
+    setEditName(cat.name);
+    setEditEmoji(cat.emoji);
   }
 
-  const previewColor = CATEGORY_COLORS[existingCount % CATEGORY_COLORS.length];
+  function saveEdit() {
+    if (!editName.trim() || !editingId) return;
+    onEdit(editingId, editName.trim(), editEmoji);
+    setEditingId(null);
+  }
+
+  function handleAdd() {
+    if (!newName.trim()) return;
+    onAdd(newName.trim(), newEmoji);
+    setNewName("");
+    setNewEmoji("🏷️");
+    setShowAddForm(false);
+  }
+
+  const confirmCat = categories.find((c) => c.id === confirmDeleteId);
+  const itemCount  = (id: string) => items.filter((i) => i.categoryId === id).length;
+
+  const EmojiGrid = ({ value, onChange }: { value: string; onChange: (e: string) => void }) => (
+    <div className="space-y-1.5">
+      <div className="grid grid-cols-8 gap-1">
+        {EMOJI_OPTIONS.map((e) => (
+          <button key={e} type="button" onClick={() => onChange(e)}
+            className={`text-lg p-1 rounded-lg transition-all ${value === e ? "bg-violet-100 dark:bg-violet-900/40 scale-110 shadow-sm" : "hover:bg-slate-100 dark:hover:bg-slate-700"}`}>
+            {e}
+          </button>
+        ))}
+      </div>
+      <input type="text" value={value} onChange={(e) => onChange(e.target.value)}
+        placeholder="カスタム絵文字" maxLength={2}
+        className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200" />
+    </div>
+  );
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-white dark:bg-slate-800 rounded-3xl p-6 w-full max-w-sm z-10 shadow-2xl">
-        <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4">カテゴリを追加</h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">絵文字を選ぶ</label>
-            <div className="grid grid-cols-8 gap-1.5 mt-1.5">
-              {EMOJI_OPTIONS.map((e) => (
-                <button key={e} type="button" onClick={() => setEmoji(e)}
-                  className={`text-xl p-1.5 rounded-xl transition-all ${emoji === e ? "bg-violet-100 dark:bg-violet-900/40 scale-110 shadow-sm" : "hover:bg-slate-100 dark:hover:bg-slate-700"}`}>
-                  {e}
+      <div className="relative bg-white dark:bg-slate-800 rounded-3xl w-full max-w-sm z-10 shadow-2xl max-h-[85vh] flex flex-col">
+        {/* header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 dark:border-slate-700">
+          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">カテゴリ管理</h2>
+          <button onClick={onClose} className="text-slate-300 dark:text-slate-500 hover:text-slate-500 dark:hover:text-slate-300 text-xl p-1">✕</button>
+        </div>
+
+        {/* list */}
+        <div className="overflow-y-auto flex-1 px-4 py-3 space-y-2">
+          {categories.map((cat) => {
+            const colors = CATEGORY_COLORS[cat.colorIndex % CATEGORY_COLORS.length];
+            if (editingId === cat.id) {
+              return (
+                <div key={cat.id} className="bg-slate-50 dark:bg-slate-700/50 rounded-2xl p-3 space-y-3">
+                  <EmojiGrid value={editEmoji} onChange={setEditEmoji} />
+                  <input
+                    type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
+                    placeholder="カテゴリ名" autoFocus
+                    className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200"
+                  />
+                  <div className="flex gap-2">
+                    <button onClick={() => setEditingId(null)}
+                      className="flex-1 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                      キャンセル
+                    </button>
+                    <button onClick={saveEdit}
+                      className="flex-1 py-2 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white text-sm font-semibold">
+                      保存
+                    </button>
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <div key={cat.id} className="flex items-center justify-between bg-slate-50 dark:bg-slate-700/50 rounded-xl px-3 py-2.5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-xs font-medium ${colors.activeTab}`}>
+                    {cat.emoji} {cat.name}
+                  </span>
+                  <span className="text-xs text-slate-400 dark:text-slate-500">{itemCount(cat.id)}件</span>
+                </div>
+                <div className="flex items-center gap-0.5 flex-shrink-0">
+                  <button onClick={() => startEdit(cat)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-violet-500 hover:bg-violet-50 dark:hover:bg-violet-900/20 transition-colors">
+                    <PencilIcon className="h-3.5 w-3.5" />
+                  </button>
+                  <button onClick={() => setConfirmDeleteId(cat.id)}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                    <TrashIcon className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* add section */}
+        <div className="border-t border-slate-100 dark:border-slate-700 px-4 py-3">
+          {showAddForm ? (
+            <div className="space-y-3">
+              <EmojiGrid value={newEmoji} onChange={setNewEmoji} />
+              <input
+                type="text" value={newName} onChange={(e) => setNewName(e.target.value)}
+                placeholder="カテゴリ名" autoFocus
+                onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }}
+                className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500"
+              />
+              <div className="flex gap-2">
+                <button onClick={() => { setShowAddForm(false); setNewName(""); setNewEmoji("🏷️"); }}
+                  className="flex-1 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                  キャンセル
                 </button>
-              ))}
+                <button onClick={handleAdd}
+                  className="flex-1 py-2 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white text-sm font-semibold">
+                  追加
+                </button>
+              </div>
             </div>
-            <input type="text" value={emoji} onChange={(e) => setEmoji(e.target.value)} placeholder="カスタム絵文字" maxLength={2}
-              className="w-full mt-2 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200" />
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">カテゴリ名</label>
-            <input ref={nameRef} type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="例: 冷凍食品" required
-              className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
-          </div>
-          {name && (
-            <div className="flex justify-center">
-              <span className={`px-3 py-1.5 rounded-full text-sm font-medium ${previewColor.activeTab}`}>{emoji} {name}</span>
-            </div>
+          ) : (
+            <button onClick={() => setShowAddForm(true)}
+              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border-2 border-dashed border-slate-200 dark:border-slate-600 text-sm text-slate-400 dark:text-slate-500 hover:border-violet-300 dark:hover:border-violet-600 hover:text-violet-500 dark:hover:text-violet-400 transition-colors">
+              ＋ カテゴリを追加
+            </button>
           )}
-          <div className="flex gap-2 pt-1">
-            <button type="button" onClick={onClose}
-              className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
-              キャンセル
-            </button>
-            <button type="submit"
-              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white text-sm font-semibold">
-              追加
-            </button>
+        </div>
+
+        {/* delete confirmation overlay */}
+        {confirmDeleteId && (
+          <div className="absolute inset-0 bg-white dark:bg-slate-800 rounded-3xl flex flex-col items-center justify-center p-6 gap-4">
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 text-center">
+              「{confirmCat?.emoji} {confirmCat?.name}」を削除しますか？
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 text-center leading-relaxed">
+              このカテゴリに登録されたすべての商品（{itemCount(confirmDeleteId)}件）も削除されます。
+            </p>
+            <div className="flex gap-3 w-full">
+              <button onClick={() => setConfirmDeleteId(null)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                キャンセル
+              </button>
+              <button
+                onClick={() => { onDelete(confirmDeleteId); setConfirmDeleteId(null); }}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors">
+                削除
+              </button>
+            </div>
           </div>
-        </form>
+        )}
       </div>
     </div>
   );
