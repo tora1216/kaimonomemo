@@ -126,7 +126,9 @@ export default function Home() {
   function handleDeleteStore(storeId: string) {
     setStores((prev) => prev.filter((s) => s.id !== storeId));
     setItems((prev) =>
-      prev.map((item) => ({ ...item, prices: item.prices.filter((p) => p.storeId !== storeId) }))
+      prev
+        .map((item) => ({ ...item, prices: item.prices.filter((p) => p.storeId !== storeId) }))
+        .filter((item) => item.prices.length > 0)
     );
   }
 
@@ -496,6 +498,43 @@ function PriceDetailSheet({
             </button>
             <button onClick={onClose} className="text-slate-300 dark:text-slate-500 hover:text-slate-500 dark:hover:text-slate-300 text-xl p-1">✕</button>
           </div>
+        </div>
+
+        {/* ショッピングリンク */}
+        <div className="flex items-center gap-2 px-5 pb-3">
+          {[
+            {
+              label: "Amazon",
+              url: `https://www.amazon.co.jp/s?k=${encodeURIComponent(currentItem.name)}`,
+              bg: "bg-[#FF9900]",
+              text: "text-white",
+            },
+            {
+              label: "Yahoo!",
+              url: `https://shopping.yahoo.co.jp/search?p=${encodeURIComponent(currentItem.name)}`,
+              bg: "bg-[#FF0033]",
+              text: "text-white",
+            },
+            {
+              label: "楽天",
+              url: `https://search.rakuten.co.jp/search/mall/${encodeURIComponent(currentItem.name)}/`,
+              bg: "bg-[#BF0000]",
+              text: "text-white",
+            },
+          ].map(({ label, url, bg, text }) => (
+            <a
+              key={label}
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${bg} ${text} hover:opacity-85 transition-opacity`}
+            >
+              {label}
+              <svg className="h-3 w-3 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+              </svg>
+            </a>
+          ))}
         </div>
 
         <div className="overflow-y-auto flex-1 px-5">
