@@ -24,3 +24,9 @@ export type Item = {
   name: string;
   prices: PriceEntry[];
 };
+
+export type ShoppingItem = {
+  id: string;
+  label: string;
+  checked: boolean;
+};
