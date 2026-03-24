@@ -32,7 +32,7 @@ import { CSS } from "@dnd-kit/utilities";
 import type { Category, Store, Item, PriceEntry, ShoppingItem } from "@/lib/types";
 import { CATEGORY_COLORS, EMOJI_OPTIONS, ICON_BTN } from "@/lib/constants";
 import { DEFAULT_CATEGORIES, DEFAULT_STORES, DEFAULT_ITEMS } from "@/lib/defaultData";
-import { uid, loadData } from "@/lib/utils";
+import { uid, loadData, calcUnitPrice } from "@/lib/utils";
 import { APP_VERSION, CHANGELOG } from "@/lib/changelog";
 
 // ===================== Main App =====================
@@ -103,8 +103,8 @@ export default function Home() {
     });
   }
 
-  function handleAddSubmit(itemName: string, categoryId: string, storeId: string, price: number, memo: string) {
-    const entry: PriceEntry = { id: uid(), storeId, price, memo, date: new Date().toISOString().split("T")[0] };
+  function handleAddSubmit(itemName: string, categoryId: string, storeId: string, price: number, memo: string, quantity?: number, unit?: string) {
+    const entry: PriceEntry = { id: uid(), storeId, price, memo, date: new Date().toISOString().split("T")[0], ...(quantity && unit ? { quantity, unit } : {}) };
     setItems((prev) => {
       const target = prev.find((i) => i.name === itemName && i.categoryId === categoryId);
       if (!target) return [...prev, { id: uid(), categoryId, name: itemName, prices: [entry] }];
@@ -113,8 +113,8 @@ export default function Home() {
     setShowAddDialog(false);
   }
 
-  function handleAddPriceForItem(itemId: string, storeId: string, price: number, memo: string) {
-    const entry: PriceEntry = { id: uid(), storeId, price, memo, date: new Date().toISOString().split("T")[0] };
+  function handleAddPriceForItem(itemId: string, storeId: string, price: number, memo: string, quantity?: number, unit?: string) {
+    const entry: PriceEntry = { id: uid(), storeId, price, memo, date: new Date().toISOString().split("T")[0], ...(quantity && unit ? { quantity, unit } : {}) };
     setItems((prev) => prev.map((i) => (i.id === itemId ? { ...i, prices: [...i.prices, entry] } : i)));
     setSelectedItem((prev) => (prev?.id === itemId ? { ...prev, prices: [...prev.prices, entry] } : prev));
   }
@@ -127,6 +127,22 @@ export default function Home() {
   function handleDeleteItem(itemId: string) {
     setItems((prev) => prev.filter((i) => i.id !== itemId));
     setSelectedItem(null);
+  }
+
+  function handleEditEntry(
+    itemId: string,
+    entryId: string,
+    updates: { storeId: string; price: number; memo: string; quantity?: number; unit?: string },
+  ) {
+    const date = new Date().toISOString().split("T")[0];
+    const apply = (p: PriceEntry) =>
+      p.id === entryId ? { ...p, ...updates, date } : p;
+    setItems((prev) =>
+      prev.map((i) => i.id === itemId ? { ...i, prices: i.prices.map(apply) } : i)
+    );
+    setSelectedItem((prev) =>
+      prev?.id === itemId ? { ...prev, prices: prev.prices.map(apply) } : prev
+    );
   }
 
   function handleDeleteStore(storeId: string) {
@@ -358,8 +374,9 @@ export default function Home() {
           stores={stores}
           activeColors={activeColors}
           onClose={() => setSelectedItem(null)}
-          onAddPrice={(storeId, price, memo) => handleAddPriceForItem(selectedItem.id, storeId, price, memo)}
+          onAddPrice={(storeId, price, memo, quantity, unit) => handleAddPriceForItem(selectedItem.id, storeId, price, memo, quantity, unit)}
           onDeleteEntry={(entryId) => handleDeleteEntry(selectedItem.id, entryId)}
+          onEditEntry={(entryId, updates) => handleEditEntry(selectedItem.id, entryId, updates)}
           onDeleteItem={() => handleDeleteItem(selectedItem.id)}
         />
       )}
@@ -505,22 +522,38 @@ function SortableItemCard({
 }
 
 // ===================== PriceDetailSheet =====================
+type EntryUpdates = { storeId: string; price: number; memo: string; quantity?: number; unit?: string };
+
 function PriceDetailSheet({
-  item, items, stores, activeColors, onClose, onAddPrice, onDeleteEntry, onDeleteItem,
+  item, items, stores, activeColors, onClose, onAddPrice, onDeleteEntry, onEditEntry, onDeleteItem,
 }: {
   item: Item;
   items: Item[];
   stores: Store[];
   activeColors: (typeof CATEGORY_COLORS)[number];
   onClose: () => void;
-  onAddPrice: (storeId: string, price: number, memo: string) => void;
+  onAddPrice: (storeId: string, price: number, memo: string, quantity?: number, unit?: string) => void;
   onDeleteEntry: (entryId: string) => void;
+  onEditEntry: (entryId: string, updates: EntryUpdates) => void;
   onDeleteItem: () => void;
 }) {
-  const [showForm, setShowForm] = useState(false);
-  const [storeId, setStoreId]   = useState(stores[0]?.id ?? "");
-  const [price,   setPrice]     = useState("");
-  const [memo,    setMemo]      = useState("");
+  const [showForm,  setShowForm]  = useState(false);
+  const [storeId,   setStoreId]   = useState(stores[0]?.id ?? "");
+  const [price,     setPrice]     = useState("");
+  const [memo,      setMemo]      = useState("");
+  const [quantity,  setQuantity]  = useState("");
+  const [unit,      setUnit]      = useState("");
+
+  // 編集中エントリの state
+  const [editingId,  setEditingId]  = useState<string | null>(null);
+  const [editStore,  setEditStore]  = useState("");
+  const [editPrice,  setEditPrice]  = useState("");
+  const [editMemo,   setEditMemo]   = useState("");
+  const [editQty,    setEditQty]    = useState("");
+  const [editUnit,   setEditUnit]   = useState("");
+
+  // アイテム削除確認フラグ
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const currentItem  = items.find((i) => i.id === item.id) ?? item;
   const sortedPrices = [...currentItem.prices].sort((a, b) => a.price - b.price);
@@ -529,8 +562,28 @@ function PriceDetailSheet({
     e.preventDefault();
     const p = parseInt(price);
     if (!p || !storeId) return;
-    onAddPrice(storeId, p, memo);
-    setPrice(""); setMemo(""); setShowForm(false);
+    const qty = quantity ? parseFloat(quantity) : undefined;
+    onAddPrice(storeId, p, memo, qty, unit || undefined);
+    setPrice(""); setMemo(""); setQuantity(""); setUnit(""); setShowForm(false);
+  }
+
+  function startEdit(entry: PriceEntry) {
+    setEditingId(entry.id);
+    setEditStore(entry.storeId);
+    setEditPrice(String(entry.price));
+    setEditMemo(entry.memo ?? "");
+    setEditQty(entry.quantity ? String(entry.quantity) : "");
+    setEditUnit(entry.unit ?? "");
+    setShowForm(false);
+  }
+
+  function saveEdit() {
+    if (!editingId) return;
+    const p = parseInt(editPrice);
+    if (!p) return;
+    const qty = editQty ? parseFloat(editQty) : undefined;
+    onEditEntry(editingId, { storeId: editStore, price: p, memo: editMemo, quantity: qty, unit: editUnit || undefined });
+    setEditingId(null);
   }
 
   return (
@@ -543,7 +596,7 @@ function PriceDetailSheet({
         <div className="flex items-center justify-between px-5 py-4">
           <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">{currentItem.name}</h2>
           <div className="flex items-center gap-2">
-            <button onClick={onDeleteItem} className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+            <button onClick={() => setConfirmDelete(true)} className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
               削除
             </button>
             <button onClick={onClose} className="text-slate-300 dark:text-slate-500 hover:text-slate-500 dark:hover:text-slate-300 text-xl p-1">✕</button>
@@ -595,6 +648,51 @@ function PriceDetailSheet({
               {sortedPrices.map((entry, i) => {
                 const store      = stores.find((s) => s.id === entry.storeId);
                 const isCheapest = i === 0;
+                const isEditing  = editingId === entry.id;
+
+                if (isEditing) {
+                  const previewUp = editQty && editUnit
+                    ? calcUnitPrice(parseInt(editPrice) || 0, parseFloat(editQty), editUnit)
+                    : null;
+                  return (
+                    <div key={entry.id} className="rounded-xl border border-violet-200 dark:border-violet-700 bg-violet-50 dark:bg-violet-900/20 p-3 space-y-2">
+                      <select value={editStore} onChange={(e) => setEditStore(e.target.value)}
+                        className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600">
+                        {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                      <input type="number" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} placeholder="金額（円）" min="0"
+                        className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <input type="number" value={editQty} onChange={(e) => setEditQty(e.target.value)} placeholder="数量" min="0" step="any"
+                            className="w-20 border border-slate-200 dark:border-slate-600 rounded-xl px-2.5 py-2 text-sm bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
+                          <div className="flex flex-wrap gap-1">
+                            {["個","枚","本","袋","g","kg","ml","L"].map((u) => (
+                              <button key={u} type="button" onClick={() => setEditUnit(editUnit === u ? "" : u)}
+                                className={`px-2 py-0.5 rounded-full text-xs font-medium transition-all ${editUnit === u ? "bg-violet-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"}`}>
+                                {u}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        {previewUp && <p className="text-xs text-violet-500 dark:text-violet-400 mt-1">→ 単価 ¥{previewUp.value}/{previewUp.per}</p>}
+                      </div>
+                      <input type="text" value={editMemo} onChange={(e) => setEditMemo(e.target.value)} placeholder="メモ（任意）"
+                        className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => setEditingId(null)}
+                          className="flex-1 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                          キャンセル
+                        </button>
+                        <button type="button" onClick={saveEdit}
+                          className="flex-1 py-2 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white text-sm font-semibold">
+                          保存
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
                   <div
                     key={entry.id}
@@ -614,10 +712,21 @@ function PriceDetailSheet({
                       {entry.memo && <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{entry.memo}</div>}
                       <div className="text-xs text-slate-300 dark:text-slate-600 mt-0.5">{entry.date}</div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-lg font-bold ${isCheapest ? activeColors.price : "text-slate-500 dark:text-slate-400"}`}>
-                        ¥{entry.price.toLocaleString()}
-                      </span>
+                    <div className="flex items-center gap-1">
+                      <div className="text-right mr-1">
+                        <div className={`text-lg font-bold ${isCheapest ? activeColors.price : "text-slate-500 dark:text-slate-400"}`}>
+                          ¥{entry.price.toLocaleString()}
+                        </div>
+                        {entry.quantity && entry.unit && (() => {
+                          const up = calcUnitPrice(entry.price, entry.quantity, entry.unit);
+                          return up ? (
+                            <div className="text-xs text-slate-400 dark:text-slate-500">¥{up.value}/{up.per}</div>
+                          ) : null;
+                        })()}
+                      </div>
+                      <button onClick={() => startEdit(entry)} className="text-slate-300 dark:text-slate-600 hover:text-violet-400 transition-colors p-1">
+                        <PencilIcon className="h-3.5 w-3.5" />
+                      </button>
                       <button onClick={() => onDeleteEntry(entry.id)} className="text-slate-200 dark:text-slate-600 hover:text-red-400 transition-colors p-1">✕</button>
                     </div>
                   </div>
@@ -641,8 +750,32 @@ function PriceDetailSheet({
                   className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
               </div>
               <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">数量・単位（任意）</label>
+                <div className="flex items-center gap-2 mt-1">
+                  <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="例: 500" min="0" step="any"
+                    className="w-24 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
+                  <div className="flex flex-wrap gap-1.5">
+                    {["個", "枚", "本", "袋", "g", "kg", "ml", "L"].map((u) => (
+                      <button key={u} type="button" onClick={() => setUnit(unit === u ? "" : u)}
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all ${unit === u ? "bg-violet-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600"}`}>
+                        {u}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {quantity && unit && (() => {
+                  const p = parseInt(price);
+                  const q = parseFloat(quantity);
+                  if (!p || !q) return null;
+                  const up = calcUnitPrice(p, q, unit);
+                  return up ? (
+                    <p className="text-xs text-violet-500 dark:text-violet-400 mt-1">→ 単価 ¥{up.value}/{up.per}</p>
+                  ) : null;
+                })()}
+              </div>
+              <div>
                 <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">メモ（任意）</label>
-                <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="例: 500ml × 6本"
+                <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="例: 特売品"
                   className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
               </div>
               <div className="flex gap-2">
@@ -667,6 +800,28 @@ function PriceDetailSheet({
             </button>
           </div>
         )}
+
+        {/* アイテム削除確認オーバーレイ */}
+        {confirmDelete && (
+          <div className="absolute inset-0 bg-white dark:bg-slate-800 rounded-t-3xl md:rounded-3xl flex flex-col items-center justify-center p-6 gap-4 z-10">
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 text-center">
+              「{currentItem.name}」を削除してよろしいですか？
+            </p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 text-center leading-relaxed">
+              この操作は元に戻せません。
+            </p>
+            <div className="flex gap-3 w-full max-w-xs">
+              <button onClick={() => setConfirmDelete(false)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                キャンセル
+              </button>
+              <button onClick={onDeleteItem}
+                className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors">
+                削除
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -680,19 +835,22 @@ function AddDialog({
   stores: Store[];
   defaultCategoryId: string;
   onClose: () => void;
-  onSubmit: (itemName: string, categoryId: string, storeId: string, price: number, memo: string) => void;
+  onSubmit: (itemName: string, categoryId: string, storeId: string, price: number, memo: string, quantity?: number, unit?: string) => void;
 }) {
   const [categoryId,  setCategoryId]  = useState(defaultCategoryId);
   const [itemName,    setItemName]    = useState("");
   const [storeId,     setStoreId]     = useState(stores[0]?.id ?? "");
   const [price,       setPrice]       = useState("");
   const [memo,        setMemo]        = useState("");
+  const [quantity,    setQuantity]    = useState("");
+  const [unit,        setUnit]        = useState("");
 
   function handleSubmit(e: React.SyntheticEvent) {
     e.preventDefault();
     const p = parseInt(price);
     if (!itemName.trim() || !storeId || !p) return;
-    onSubmit(itemName.trim(), categoryId, storeId, p, memo);
+    const qty = quantity ? parseFloat(quantity) : undefined;
+    onSubmit(itemName.trim(), categoryId, storeId, p, memo, qty, unit || undefined);
   }
 
   return (
@@ -740,8 +898,32 @@ function AddDialog({
               className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
           </div>
           <div>
+            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">数量・単位（任意）</label>
+            <div className="flex items-center gap-2 mt-1">
+              <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="例: 500" min="0" step="any"
+                className="w-24 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
+              <div className="flex flex-wrap gap-1.5">
+                {["個", "枚", "本", "袋", "g", "kg", "ml", "L"].map((u) => (
+                  <button key={u} type="button" onClick={() => setUnit(unit === u ? "" : u)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all ${unit === u ? "bg-violet-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600"}`}>
+                    {u}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {quantity && unit && (() => {
+              const p = parseInt(price);
+              const q = parseFloat(quantity);
+              if (!p || !q) return null;
+              const up = calcUnitPrice(p, q, unit);
+              return up ? (
+                <p className="text-xs text-violet-500 dark:text-violet-400 mt-1">→ 単価 ¥{up.value}/{up.per}</p>
+              ) : null;
+            })()}
+          </div>
+          <div>
             <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">メモ（任意）</label>
-            <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="例: 1L、特売品"
+            <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="例: 特売品"
               className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
           </div>
           <button type="submit"

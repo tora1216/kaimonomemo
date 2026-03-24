@@ -16,6 +16,8 @@ export type PriceEntry = {
   price: number;
   memo: string;
   date: string;
+  quantity?: number;
+  unit?: string;
 };
 
 export type Item = {
