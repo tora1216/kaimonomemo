@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   SunIcon,
   MoonIcon,
@@ -10,6 +10,8 @@ import {
   ArrowUpOnSquareIcon,
   ClipboardDocumentListIcon,
   TrashIcon,
+  MagnifyingGlassIcon,
+  XMarkIcon,
 } from "@heroicons/react/24/outline";
 import {
   DndContext,
@@ -32,7 +34,7 @@ import { CSS } from "@dnd-kit/utilities";
 import type { Category, Store, Item, PriceEntry, ShoppingItem } from "@/lib/types";
 import { CATEGORY_COLORS, EMOJI_OPTIONS, ICON_BTN } from "@/lib/constants";
 import { DEFAULT_CATEGORIES, DEFAULT_STORES, DEFAULT_ITEMS } from "@/lib/defaultData";
-import { uid, loadData, calcUnitPrice } from "@/lib/utils";
+import { uid, loadData, calcUnitPrice, loadHistory, updateHistory } from "@/lib/utils";
 import { APP_VERSION, CHANGELOG } from "@/lib/changelog";
 
 // ===================== Main App =====================
@@ -52,6 +54,10 @@ export default function Home() {
   const [showShoppingList, setShowShoppingList] = useState(false);
   const [selectedItem,     setSelectedItem]     = useState<Item | null>(null);
   const [shoppingList,     setShoppingList]     = useState<ShoppingItem[]>([]);
+  const [searchQuery,  setSearchQuery]  = useState("");
+  const [showSearch,   setShowSearch]   = useState(false);
+  const [memoHistory,  setMemoHistory]  = useState<string[]>([]);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -64,11 +70,16 @@ export default function Home() {
     setStores(      loadData("kaimono_stores",        DEFAULT_STORES));
     setItems(       loadData("kaimono_items",         DEFAULT_ITEMS));
     setShoppingList(loadData("kaimono_shopping_list", []));
+    setMemoHistory(loadHistory("kaimono_memo_history"));
     const savedTheme = localStorage.getItem("kaimono_theme") as "light" | "dark" | null;
     const initial = savedTheme ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
     setTheme(initial);
     setHydrated(true);
   }, []);
+
+  function addToMemoHistory(value: string) {
+    if (value.trim()) setMemoHistory(updateHistory("kaimono_memo_history", value));
+  }
 
   useEffect(() => {
     if (theme === "dark") {
@@ -87,6 +98,12 @@ export default function Home() {
   const filteredItems = items.filter((i) => i.categoryId === activeCategory);
   const activeCat    = categories.find((c) => c.id === activeCategory);
   const activeColors = CATEGORY_COLORS[(activeCat?.colorIndex ?? 0) % CATEGORY_COLORS.length];
+
+  const searchResults = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase();
+    return items.filter((i) => i.name.toLowerCase().includes(q));
+  }, [items, searchQuery]);
 
   function handleItemDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -110,6 +127,7 @@ export default function Home() {
       if (!target) return [...prev, { id: uid(), categoryId, name: itemName, prices: [entry] }];
       return prev.map((i) => (i.id === target.id ? { ...i, prices: [...i.prices, entry] } : i));
     });
+    addToMemoHistory(memo);
     setShowAddDialog(false);
   }
 
@@ -117,6 +135,7 @@ export default function Home() {
     const entry: PriceEntry = { id: uid(), storeId, price, memo, date: new Date().toISOString().split("T")[0], ...(quantity && unit ? { quantity, unit } : {}) };
     setItems((prev) => prev.map((i) => (i.id === itemId ? { ...i, prices: [...i.prices, entry] } : i)));
     setSelectedItem((prev) => (prev?.id === itemId ? { ...prev, prices: [...prev.prices, entry] } : prev));
+    addToMemoHistory(memo);
   }
 
   function handleDeleteEntry(itemId: string, entryId: string) {
@@ -238,9 +257,47 @@ export default function Home() {
                 </span>
               )}
             </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowSearch((v) => !v);
+                setSearchQuery("");
+              }}
+              className={`${ICON_BTN} ${showSearch ? "text-violet-500 dark:text-violet-400" : ""}`}
+              aria-label="検索"
+            >
+              <MagnifyingGlassIcon className="h-5 w-5" />
+            </button>
           </div>
         </div>
       </header>
+
+      {/* ── Search bar ── */}
+      {showSearch && (
+        <div className="bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 px-4 py-2">
+          <div className="mx-auto max-w-5xl relative">
+            <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="商品名を検索..."
+              autoFocus
+              className="w-full pl-9 pr-8 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-sm bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-300 hover:text-slate-500 dark:hover:text-slate-300"
+              >
+                <XMarkIcon className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ── Category tabs (mobile only) ── */}
       <div className="md:hidden bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700">
@@ -303,7 +360,59 @@ export default function Home() {
           </div>
 
           <main className="px-4 py-4 pb-28 md:px-8 md:pb-12">
-            {!hydrated ? (
+            {searchQuery.trim() ? (
+              <div>
+                <p className="text-xs text-slate-400 dark:text-slate-500 mb-3">
+                  「{searchQuery}」の検索結果 {searchResults.length}件
+                </p>
+                {searchResults.length === 0 ? (
+                  <div className="text-center py-16">
+                    <div className="text-5xl mb-3">🔍</div>
+                    <p className="text-slate-400 dark:text-slate-500 text-sm">該当する商品が見つかりません</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {searchResults.map((item) => {
+                      const cat = categories.find((c) => c.id === item.categoryId);
+                      const colors = CATEGORY_COLORS[(cat?.colorIndex ?? 0) % CATEGORY_COLORS.length];
+                      const minPrice = item.prices.length > 0 ? Math.min(...item.prices.map((p) => p.price)) : null;
+                      const minEntry = minPrice !== null ? item.prices.find((p) => p.price === minPrice) : null;
+                      const minStore = minEntry ? stores.find((s) => s.id === minEntry.storeId) : null;
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            setActiveCategory(item.categoryId);
+                            setSelectedItem(item);
+                          }}
+                          className="w-full text-left bg-white dark:bg-slate-800 rounded-2xl shadow-sm border-l-4 px-3 py-2 hover:shadow-md transition-all"
+                          style={{ borderColor: colors.accent.replace("border-l-", "") }}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <span className="font-semibold text-slate-700 dark:text-slate-200 text-sm">{item.name}</span>
+                              {cat && (
+                                <span className={`ml-2 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${colors.activeTab}`}>
+                                  {cat.emoji} {cat.name}
+                                </span>
+                              )}
+                            </div>
+                            {minPrice !== null ? (
+                              <span className={`text-sm font-bold flex-shrink-0 ${colors.price}`}>¥{minPrice.toLocaleString()}</span>
+                            ) : (
+                              <span className="text-xs text-slate-300 dark:text-slate-600">未登録</span>
+                            )}
+                          </div>
+                          {minStore && (
+                            <p className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{minStore.name}</p>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ) : !hydrated ? (
               <div className="text-center py-20 text-slate-300 dark:text-slate-600 text-sm">読み込み中...</div>
             ) : filteredItems.length === 0 ? (
               <div className="text-center py-24">
@@ -373,6 +482,7 @@ export default function Home() {
           items={items}
           stores={stores}
           activeColors={activeColors}
+          memoHistory={memoHistory}
           onClose={() => setSelectedItem(null)}
           onAddPrice={(storeId, price, memo, quantity, unit) => handleAddPriceForItem(selectedItem.id, storeId, price, memo, quantity, unit)}
           onDeleteEntry={(entryId) => handleDeleteEntry(selectedItem.id, entryId)}
@@ -385,6 +495,7 @@ export default function Home() {
           categories={categories}
           stores={stores}
           defaultCategoryId={activeCategory}
+          memoHistory={memoHistory}
           onClose={() => setShowAddDialog(false)}
           onSubmit={handleAddSubmit}
         />
@@ -525,12 +636,13 @@ function SortableItemCard({
 type EntryUpdates = { storeId: string; price: number; memo: string; quantity?: number; unit?: string };
 
 function PriceDetailSheet({
-  item, items, stores, activeColors, onClose, onAddPrice, onDeleteEntry, onEditEntry, onDeleteItem,
+  item, items, stores, activeColors, memoHistory, onClose, onAddPrice, onDeleteEntry, onEditEntry, onDeleteItem,
 }: {
   item: Item;
   items: Item[];
   stores: Store[];
   activeColors: (typeof CATEGORY_COLORS)[number];
+  memoHistory: string[];
   onClose: () => void;
   onAddPrice: (storeId: string, price: number, memo: string, quantity?: number, unit?: string) => void;
   onDeleteEntry: (entryId: string) => void;
@@ -677,8 +789,11 @@ function PriceDetailSheet({
                         </div>
                         {previewUp && <p className="text-xs text-violet-500 dark:text-violet-400 mt-1">→ 単価 ¥{previewUp.value}/{previewUp.per}</p>}
                       </div>
-                      <input type="text" value={editMemo} onChange={(e) => setEditMemo(e.target.value)} placeholder="メモ（任意）"
+                      <input type="text" value={editMemo} onChange={(e) => setEditMemo(e.target.value)} placeholder="メモ（任意）" list="memo-history-edit"
                         className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
+                      <datalist id="memo-history-edit">
+                        {memoHistory.map((h) => <option key={h} value={h} />)}
+                      </datalist>
                       <div className="flex gap-2">
                         <button type="button" onClick={() => setEditingId(null)}
                           className="flex-1 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
@@ -775,8 +890,11 @@ function PriceDetailSheet({
               </div>
               <div>
                 <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">メモ（任意）</label>
-                <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="例: 特売品"
+                <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="例: 特売品" list="memo-history-add"
                   className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
+                <datalist id="memo-history-add">
+                  {memoHistory.map((h) => <option key={h} value={h} />)}
+                </datalist>
               </div>
               <div className="flex gap-2">
                 <button type="button" onClick={() => setShowForm(false)}
@@ -829,11 +947,12 @@ function PriceDetailSheet({
 
 // ===================== AddDialog =====================
 function AddDialog({
-  categories, stores, defaultCategoryId, onClose, onSubmit,
+  categories, stores, defaultCategoryId, memoHistory, onClose, onSubmit,
 }: {
   categories: Category[];
   stores: Store[];
   defaultCategoryId: string;
+  memoHistory: string[];
   onClose: () => void;
   onSubmit: (itemName: string, categoryId: string, storeId: string, price: number, memo: string, quantity?: number, unit?: string) => void;
 }) {
@@ -923,8 +1042,11 @@ function AddDialog({
           </div>
           <div>
             <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">メモ（任意）</label>
-            <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="例: 特売品"
+            <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="例: 特売品" list="memo-history-dialog"
               className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
+            <datalist id="memo-history-dialog">
+              {memoHistory.map((h) => <option key={h} value={h} />)}
+            </datalist>
           </div>
           <button type="submit"
             className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-violet-500 to-purple-600 text-white font-semibold text-base shadow-md hover:shadow-lg transition-shadow">

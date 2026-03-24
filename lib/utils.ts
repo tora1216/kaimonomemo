@@ -8,6 +8,23 @@ export function loadData<T>(key: string, fallback: T): T {
   try { return JSON.parse(raw); } catch { return fallback; }
 }
 
+export function loadHistory(key: string): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+export function updateHistory(key: string, value: string, maxItems = 20): string[] {
+  const v = value.trim();
+  if (!v) return loadHistory(key);
+  const history = loadHistory(key);
+  const updated = [v, ...history.filter((h) => h !== v)].slice(0, maxItems);
+  try { localStorage.setItem(key, JSON.stringify(updated)); } catch {}
+  return updated;
+}
+
 /** 単価を計算して表示文字列を返す */
 export function calcUnitPrice(
   price: number,

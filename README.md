@@ -1,36 +1,50 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 買い物メモ 🐯
 
-## Getting Started
+食品・日用品の価格を店舗ごとに記録・比較できるPWAアプリです。
 
-First, run the development server:
+## 機能
+
+- **カテゴリ別商品管理** — 食品・日用品などカテゴリを自由に追加・編集・削除
+- **店舗別価格記録** — 複数店舗の価格を登録して最安値を自動表示
+- **単価計算** — g/kg/ml/L 入力で100g・100ml単位の単価を自動計算
+- **価格編集** — 登録済み価格のインライン編集
+- **検索** — 全カテゴリを横断して商品名で検索
+- **ショッピングリンク** — Amazon / Yahoo!ショッピング / 楽天市場へワンタップで移動
+- **買うものリスト** — チェックリスト形式の買い物メモ
+- **ドラッグ&ドロップ並び替え** — 編集モードで商品の順序を変更
+- **ダークモード対応**
+- **PWA対応** — ホーム画面に追加してアプリとして使用可能
+
+## 技術スタック
+
+- [Next.js 16](https://nextjs.org/) (App Router, Static Export)
+- [Tailwind CSS v4](https://tailwindcss.com/)
+- [TypeScript](https://www.typescriptlang.org/)
+- [@dnd-kit](https://dndkit.com/) — ドラッグ&ドロップ
+- [@heroicons/react](https://heroicons.com/) — アイコン
+- localStorage — データ永続化
+
+## ローカル開発
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+[http://localhost:3000](http://localhost:3000) で起動します。
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## デプロイ
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### GitHub Pages
 
-## Learn More
+`main` ブランチへの push で自動デプロイされます（`.github/workflows/deploy.yml`）。
 
-To learn more about Next.js, take a look at the following resources:
+### Vercel
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. [Vercel](https://vercel.com) にリポジトリをインポート
+2. `next.config.ts` の `output: "export"` を削除（またはコメントアウト）
+3. 環境変数 `NEXT_PUBLIC_BASE_PATH` は不要になるので削除
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## データについて
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+現在はすべてのデータを **localStorage** に保存しているため、端末間での共有はできません。Firebase 連携により複数端末・友人との共有が可能になります（将来対応予定）。

@@ -1,4 +1,4 @@
-export const APP_VERSION = "1.0.0";
+export const APP_VERSION = "1.1.0";
 
 export type ChangelogEntry = {
   version: string;
@@ -8,6 +8,21 @@ export type ChangelogEntry = {
 };
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "1.1.0",
+    date: "2026-03-24",
+    title: "機能強化",
+    changes: [
+      "商品名の全カテゴリ横断検索",
+      "メモ入力の履歴候補表示",
+      "単価計算（g/kg/ml/L対応）",
+      "価格エントリのインライン編集",
+      "アイテム・カテゴリ・店舗の削除確認ダイアログ",
+      "買うものリスト追加",
+      "カテゴリの編集・削除",
+      "Amazon / Yahoo! / 楽天へのショッピングリンク",
+    ],
+  },
   {
     version: "1.0.0",
     date: "2026-03-19",
