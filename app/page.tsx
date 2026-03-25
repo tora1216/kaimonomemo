@@ -170,6 +170,10 @@ export default function Home() {
     updateSharedData({ items: newItems });
   }
 
+  function handleChangeItemCategory(itemId: string, newCategoryId: string) {
+    updateSharedData({ items: items.map((i) => i.id === itemId ? { ...i, categoryId: newCategoryId } : i) });
+  }
+
   function handleDeleteStore(storeId: string) {
     const newStores = stores.filter((s) => s.id !== storeId);
     const newItems = items
@@ -305,8 +309,8 @@ export default function Home() {
       )}
 
       {/* ── Category tabs (mobile only) ── */}
-      <div className="md:hidden bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700">
-        <div className="flex items-center gap-2 px-4 py-2.5 overflow-x-auto" style={{ scrollbarWidth: "none" }}>
+      <div className="md:hidden bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 px-3 py-2">
+        <div className="flex flex-wrap gap-1.5 items-center">
           {categories.map((cat) => {
             const colors   = CATEGORY_COLORS[cat.colorIndex % CATEGORY_COLORS.length];
             const isActive = activeCategory === cat.id;
@@ -314,17 +318,19 @@ export default function Home() {
               <button
                 key={cat.id}
                 onClick={() => setActiveCategory(cat.id)}
-                className={`flex-shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
-                  isActive ? colors.activeTab + " shadow-sm scale-105" : colors.tab + " hover:opacity-80"
+                title={cat.name}
+                className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-sm font-medium transition-all ${
+                  isActive ? colors.activeTab + " shadow-sm" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:opacity-80"
                 }`}
               >
-                {cat.emoji} {cat.name}
+                <span>{cat.emoji}</span>
+                {isActive && <span className="text-xs">{cat.name}</span>}
               </button>
             );
           })}
           <button
             onClick={() => setShowCategoryManager(true)}
-            className="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 text-lg flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+            className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 text-base flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
           >
             +
           </button>
@@ -486,6 +492,7 @@ export default function Home() {
           item={selectedItem}
           items={items}
           stores={stores}
+          categories={categories}
           activeColors={activeColors}
           memoHistory={memoHistory}
           onClose={() => setSelectedItem(null)}
@@ -493,6 +500,7 @@ export default function Home() {
           onDeleteEntry={(entryId) => handleDeleteEntry(selectedItem.id, entryId)}
           onEditEntry={(entryId, updates) => handleEditEntry(selectedItem.id, entryId, updates)}
           onDeleteItem={() => handleDeleteItem(selectedItem.id)}
+          onChangeCategory={(catId) => handleChangeItemCategory(selectedItem.id, catId)}
         />
       )}
       {showAddDialog && (
@@ -638,11 +646,12 @@ function SortableItemCard({
 type EntryUpdates = { storeId: string; price: number; memo: string; quantity?: number; unit?: string };
 
 function PriceDetailSheet({
-  item, items, stores, activeColors, memoHistory, onClose, onAddPrice, onDeleteEntry, onEditEntry, onDeleteItem,
+  item, items, stores, categories, activeColors, memoHistory, onClose, onAddPrice, onDeleteEntry, onEditEntry, onDeleteItem, onChangeCategory,
 }: {
   item: Item;
   items: Item[];
   stores: Store[];
+  categories: Category[];
   activeColors: (typeof CATEGORY_COLORS)[number];
   memoHistory: string[];
   onClose: () => void;
@@ -650,6 +659,7 @@ function PriceDetailSheet({
   onDeleteEntry: (entryId: string) => void;
   onEditEntry: (entryId: string, updates: EntryUpdates) => void;
   onDeleteItem: () => void;
+  onChangeCategory: (categoryId: string) => void;
 }) {
   const [showForm,  setShowForm]  = useState(false);
   const [storeId,   setStoreId]   = useState(stores[0]?.id ?? "");
@@ -710,11 +720,25 @@ function PriceDetailSheet({
         <div className="flex items-center justify-between px-5 py-4">
           <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">{currentItem.name}</h2>
           <div className="flex items-center gap-2">
-            <button onClick={() => setConfirmDelete(true)} className="text-xs text-red-400 hover:text-red-600 px-2 py-1 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+            <button onClick={() => setConfirmDelete(true)} className="flex items-center gap-1.5 rounded-full border border-red-200 dark:border-red-800 px-3 py-2 text-sm text-red-500 transition hover:bg-red-50 dark:hover:bg-red-900/20">
+              <TrashIcon className="h-4 w-4" />
               削除
             </button>
             <button onClick={onClose} className="text-slate-300 dark:text-slate-500 hover:text-slate-500 dark:hover:text-slate-300 text-xl p-1">✕</button>
           </div>
+        </div>
+        {/* カテゴリ変更 */}
+        <div className="flex items-center gap-2 px-5 pb-2 flex-wrap">
+          {categories.map((cat) => {
+            const colors = CATEGORY_COLORS[cat.colorIndex % CATEGORY_COLORS.length];
+            const isActive = currentItem.categoryId === cat.id;
+            return (
+              <button key={cat.id} type="button" onClick={() => !isActive && onChangeCategory(cat.id)}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all ${isActive ? colors.activeTab + " shadow-sm" : colors.tab + " hover:opacity-80"}`}>
+                {cat.emoji} {cat.name}
+              </button>
+            );
+          })}
         </div>
 
         {/* ショッピングリンク */}
@@ -844,7 +868,9 @@ function PriceDetailSheet({
                       <button onClick={() => startEdit(entry)} className="text-slate-300 dark:text-slate-600 hover:text-violet-400 transition-colors p-1">
                         <PencilIcon className="h-3.5 w-3.5" />
                       </button>
-                      <button onClick={() => onDeleteEntry(entry.id)} className="text-slate-200 dark:text-slate-600 hover:text-red-400 transition-colors p-1">✕</button>
+                      <button onClick={() => onDeleteEntry(entry.id)} className="text-slate-300 dark:text-slate-600 hover:text-red-400 transition-colors p-1">
+                        <TrashIcon className="h-3.5 w-3.5" />
+                      </button>
                     </div>
                   </div>
                 );
@@ -1078,6 +1104,16 @@ function CategoryManagerDialog({
   const [showAddForm,     setShowAddForm]     = useState(false);
   const [newName,         setNewName]         = useState("");
   const [newEmoji,        setNewEmoji]        = useState("🏷️");
+  const newNameRef  = useRef<HTMLInputElement>(null);
+  const editNameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (showAddForm) newNameRef.current?.focus({ preventScroll: true });
+  }, [showAddForm]);
+
+  useEffect(() => {
+    if (editingId) editNameRef.current?.focus({ preventScroll: true });
+  }, [editingId]);
 
   function startEdit(cat: Category) {
     setEditingId(cat.id);
@@ -1103,18 +1139,13 @@ function CategoryManagerDialog({
   const itemCount  = (id: string) => items.filter((i) => i.categoryId === id).length;
 
   const EmojiGrid = ({ value, onChange }: { value: string; onChange: (e: string) => void }) => (
-    <div className="space-y-1.5">
-      <div className="grid grid-cols-8 gap-1">
-        {EMOJI_OPTIONS.map((e) => (
-          <button key={e} type="button" onClick={() => onChange(e)}
-            className={`text-lg p-1 rounded-lg transition-all ${value === e ? "bg-violet-100 dark:bg-violet-900/40 scale-110 shadow-sm" : "hover:bg-slate-100 dark:hover:bg-slate-700"}`}>
-            {e}
-          </button>
-        ))}
-      </div>
-      <input type="text" value={value} onChange={(e) => onChange(e.target.value)}
-        placeholder="カスタム絵文字" maxLength={2}
-        className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200" />
+    <div className="grid grid-cols-8 gap-1">
+      {EMOJI_OPTIONS.map((e) => (
+        <button key={e} type="button" onClick={() => onChange(e)}
+          className={`text-lg p-1 rounded-lg transition-all ${value === e ? "bg-violet-100 dark:bg-violet-900/40 scale-110 shadow-sm" : "hover:bg-slate-100 dark:hover:bg-slate-700"}`}>
+          {e}
+        </button>
+      ))}
     </div>
   );
 
@@ -1137,8 +1168,9 @@ function CategoryManagerDialog({
                 <div key={cat.id} className="bg-slate-50 dark:bg-slate-700/50 rounded-2xl p-3 space-y-3">
                   <EmojiGrid value={editEmoji} onChange={setEditEmoji} />
                   <input
+                    ref={editNameRef}
                     type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
-                    placeholder="カテゴリ名" autoFocus
+                    placeholder="カテゴリ名"
                     className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200"
                   />
                   <div className="flex gap-2">
@@ -1183,8 +1215,9 @@ function CategoryManagerDialog({
             <div className="space-y-3">
               <EmojiGrid value={newEmoji} onChange={setNewEmoji} />
               <input
+                ref={newNameRef}
                 type="text" value={newName} onChange={(e) => setNewName(e.target.value)}
-                placeholder="カテゴリ名" autoFocus
+                placeholder="カテゴリ名"
                 onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }}
                 className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500"
               />
