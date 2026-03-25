@@ -10,6 +10,9 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
     title: "買い物メモ",
   },
+  icons: {
+    apple: "/apple-icon.png",
+  },
 };
 
 export const viewport: Viewport = {

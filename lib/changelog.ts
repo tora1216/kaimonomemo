@@ -1,4 +1,4 @@
-export const APP_VERSION = "1.1.0";
+export const APP_VERSION = "1.2.0";
 
 export type ChangelogEntry = {
   version: string;
@@ -8,6 +8,15 @@ export type ChangelogEntry = {
 };
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "1.2.0",
+    date: "2026-03-25",
+    title: "Firebase リアルタイム同期",
+    changes: [
+      "Firebase Firestore によるデータのリアルタイム共有",
+      "Vercel へのデプロイ対応",
+    ],
+  },
   {
     version: "1.1.0",
     date: "2026-03-24",

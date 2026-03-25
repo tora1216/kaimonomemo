@@ -33,8 +33,9 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import type { Category, Store, Item, PriceEntry, ShoppingItem } from "@/lib/types";
 import { CATEGORY_COLORS, EMOJI_OPTIONS, ICON_BTN } from "@/lib/constants";
-import { DEFAULT_CATEGORIES, DEFAULT_STORES, DEFAULT_ITEMS } from "@/lib/defaultData";
-import { uid, loadData, calcUnitPrice, loadHistory, updateHistory } from "@/lib/utils";
+import { DEFAULT_CATEGORIES, DEFAULT_STORES } from "@/lib/defaultData";
+import { uid, calcUnitPrice, loadHistory, updateHistory } from "@/lib/utils";
+import { initSharedData, subscribeSharedData, updateSharedData } from "@/lib/firestore";
 import { APP_VERSION, CHANGELOG } from "@/lib/changelog";
 
 // ===================== Main App =====================
@@ -66,15 +67,27 @@ export default function Home() {
   );
 
   useEffect(() => {
-    setCategories(  loadData("kaimono_categories",    DEFAULT_CATEGORIES));
-    setStores(      loadData("kaimono_stores",        DEFAULT_STORES));
-    setItems(       loadData("kaimono_items",         DEFAULT_ITEMS));
-    setShoppingList(loadData("kaimono_shopping_list", []));
+    // theme & memo history はローカルのまま
     setMemoHistory(loadHistory("kaimono_memo_history"));
     const savedTheme = localStorage.getItem("kaimono_theme") as "light" | "dark" | null;
     const initial = savedTheme ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
     setTheme(initial);
-    setHydrated(true);
+
+    // Firestore 初期化 → リアルタイム購読
+    let unsub: (() => void) | undefined;
+    initSharedData().then(() => {
+      unsub = subscribeSharedData((data) => {
+        setCategories(data.categories);
+        setStores(data.stores);
+        setItems(data.items);
+        setShoppingList(data.shoppingList ?? []);
+        setSelectedItem((prev) =>
+          prev ? (data.items.find((i) => i.id === prev.id) ?? null) : null,
+        );
+        setHydrated(true);
+      });
+    });
+    return () => { unsub?.(); };
   }, []);
 
   function addToMemoHistory(value: string) {
@@ -90,10 +103,6 @@ export default function Home() {
     localStorage.setItem("kaimono_theme", theme);
   }, [theme]);
 
-  useEffect(() => { if (hydrated) localStorage.setItem("kaimono_categories",    JSON.stringify(categories));   }, [categories,   hydrated]);
-  useEffect(() => { if (hydrated) localStorage.setItem("kaimono_stores",        JSON.stringify(stores));       }, [stores,       hydrated]);
-  useEffect(() => { if (hydrated) localStorage.setItem("kaimono_items",         JSON.stringify(items));        }, [items,        hydrated]);
-  useEffect(() => { if (hydrated) localStorage.setItem("kaimono_shopping_list", JSON.stringify(shoppingList)); }, [shoppingList, hydrated]);
 
   const filteredItems = items.filter((i) => i.categoryId === activeCategory);
   const activeCat    = categories.find((c) => c.id === activeCategory);
@@ -108,43 +117,42 @@ export default function Home() {
   function handleItemDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    setItems((prev) => {
-      const categoryItems = prev.filter((i) => i.categoryId === activeCategory);
-      const oldIndex = categoryItems.findIndex((i) => i.id === active.id);
-      const newIndex = categoryItems.findIndex((i) => i.id === over.id);
-      const reordered = arrayMove(categoryItems, oldIndex, newIndex);
-      let catIdx = 0;
-      return prev.map((item) =>
-        item.categoryId === activeCategory ? reordered[catIdx++] : item
-      );
-    });
+    const categoryItems = items.filter((i) => i.categoryId === activeCategory);
+    const oldIndex = categoryItems.findIndex((i) => i.id === active.id);
+    const newIndex = categoryItems.findIndex((i) => i.id === over.id);
+    const reordered = arrayMove(categoryItems, oldIndex, newIndex);
+    let catIdx = 0;
+    const newItems = items.map((item) =>
+      item.categoryId === activeCategory ? reordered[catIdx++] : item,
+    );
+    updateSharedData({ items: newItems });
   }
 
   function handleAddSubmit(itemName: string, categoryId: string, storeId: string, price: number, memo: string, quantity?: number, unit?: string) {
     const entry: PriceEntry = { id: uid(), storeId, price, memo, date: new Date().toISOString().split("T")[0], ...(quantity && unit ? { quantity, unit } : {}) };
-    setItems((prev) => {
-      const target = prev.find((i) => i.name === itemName && i.categoryId === categoryId);
-      if (!target) return [...prev, { id: uid(), categoryId, name: itemName, prices: [entry] }];
-      return prev.map((i) => (i.id === target.id ? { ...i, prices: [...i.prices, entry] } : i));
-    });
+    const target = items.find((i) => i.name === itemName && i.categoryId === categoryId);
+    const newItems = target
+      ? items.map((i) => (i.id === target.id ? { ...i, prices: [...i.prices, entry] } : i))
+      : [...items, { id: uid(), categoryId, name: itemName, prices: [entry] }];
+    updateSharedData({ items: newItems });
     addToMemoHistory(memo);
     setShowAddDialog(false);
   }
 
   function handleAddPriceForItem(itemId: string, storeId: string, price: number, memo: string, quantity?: number, unit?: string) {
     const entry: PriceEntry = { id: uid(), storeId, price, memo, date: new Date().toISOString().split("T")[0], ...(quantity && unit ? { quantity, unit } : {}) };
-    setItems((prev) => prev.map((i) => (i.id === itemId ? { ...i, prices: [...i.prices, entry] } : i)));
-    setSelectedItem((prev) => (prev?.id === itemId ? { ...prev, prices: [...prev.prices, entry] } : prev));
+    const newItems = items.map((i) => (i.id === itemId ? { ...i, prices: [...i.prices, entry] } : i));
+    updateSharedData({ items: newItems });
     addToMemoHistory(memo);
   }
 
   function handleDeleteEntry(itemId: string, entryId: string) {
-    setItems((prev) => prev.map((i) => (i.id === itemId ? { ...i, prices: i.prices.filter((p) => p.id !== entryId) } : i)));
-    setSelectedItem((prev) => (prev?.id === itemId ? { ...prev, prices: prev.prices.filter((p) => p.id !== entryId) } : prev));
+    const newItems = items.map((i) => (i.id === itemId ? { ...i, prices: i.prices.filter((p) => p.id !== entryId) } : i));
+    updateSharedData({ items: newItems });
   }
 
   function handleDeleteItem(itemId: string) {
-    setItems((prev) => prev.filter((i) => i.id !== itemId));
+    updateSharedData({ items: items.filter((i) => i.id !== itemId) });
     setSelectedItem(null);
   }
 
@@ -154,23 +162,20 @@ export default function Home() {
     updates: { storeId: string; price: number; memo: string; quantity?: number; unit?: string },
   ) {
     const date = new Date().toISOString().split("T")[0];
-    const apply = (p: PriceEntry) =>
-      p.id === entryId ? { ...p, ...updates, date } : p;
-    setItems((prev) =>
-      prev.map((i) => i.id === itemId ? { ...i, prices: i.prices.map(apply) } : i)
+    const newItems = items.map((i) =>
+      i.id === itemId
+        ? { ...i, prices: i.prices.map((p) => (p.id === entryId ? { ...p, ...updates, date } : p)) }
+        : i,
     );
-    setSelectedItem((prev) =>
-      prev?.id === itemId ? { ...prev, prices: prev.prices.map(apply) } : prev
-    );
+    updateSharedData({ items: newItems });
   }
 
   function handleDeleteStore(storeId: string) {
-    setStores((prev) => prev.filter((s) => s.id !== storeId));
-    setItems((prev) =>
-      prev
-        .map((item) => ({ ...item, prices: item.prices.filter((p) => p.storeId !== storeId) }))
-        .filter((item) => item.prices.length > 0)
-    );
+    const newStores = stores.filter((s) => s.id !== storeId);
+    const newItems = items
+      .map((item) => ({ ...item, prices: item.prices.filter((p) => p.storeId !== storeId) }))
+      .filter((item) => item.prices.length > 0);
+    updateSharedData({ stores: newStores, items: newItems });
   }
 
   const categoryNav = (
@@ -505,19 +510,18 @@ export default function Home() {
           categories={categories}
           items={items}
           onClose={() => setShowCategoryManager(false)}
-          onAdd={(name: string, emoji: string) =>
-            setCategories((prev) => [...prev, { id: uid(), name, emoji, colorIndex: prev.length % CATEGORY_COLORS.length }])
-          }
-          onEdit={(id: string, name: string, emoji: string) =>
-            setCategories((prev) => prev.map((c) => (c.id === id ? { ...c, name, emoji } : c)))
-          }
+          onAdd={(name: string, emoji: string) => {
+            const newCats = [...categories, { id: uid(), name, emoji, colorIndex: categories.length % CATEGORY_COLORS.length }];
+            updateSharedData({ categories: newCats });
+          }}
+          onEdit={(id: string, name: string, emoji: string) => {
+            const newCats = categories.map((c) => (c.id === id ? { ...c, name, emoji } : c));
+            updateSharedData({ categories: newCats });
+          }}
           onDelete={(id: string) => {
-            setCategories((prev) => {
-              const updated = prev.filter((c) => c.id !== id);
-              if (activeCategory === id) setActiveCategory(updated[0]?.id ?? "");
-              return updated;
-            });
-            setItems((prev) => prev.filter((i) => i.categoryId !== id));
+            const newCats = categories.filter((c) => c.id !== id);
+            if (activeCategory === id) setActiveCategory(newCats[0]?.id ?? "");
+            updateSharedData({ categories: newCats, items: items.filter((i) => i.categoryId !== id) });
           }}
         />
       )}
@@ -525,7 +529,7 @@ export default function Home() {
         <StoreManagerDialog
           stores={stores}
           onClose={() => setShowStoreManager(false)}
-          onAdd={(name) => setStores((prev) => [...prev, { id: uid(), name }])}
+          onAdd={(name) => updateSharedData({ stores: [...stores, { id: uid(), name }] })}
           onDelete={handleDeleteStore}
         />
       )}
@@ -537,18 +541,16 @@ export default function Home() {
           list={shoppingList}
           onClose={() => setShowShoppingList(false)}
           onAdd={(label: string) =>
-            setShoppingList((prev) => [...prev, { id: `todo-${Date.now()}`, label, checked: false }])
+            updateSharedData({ shoppingList: [...shoppingList, { id: `todo-${Date.now()}`, label, checked: false }] })
           }
           onToggle={(id: string) =>
-            setShoppingList((prev) =>
-              prev.map((i) => (i.id === id ? { ...i, checked: !i.checked } : i))
-            )
+            updateSharedData({ shoppingList: shoppingList.map((i) => (i.id === id ? { ...i, checked: !i.checked } : i)) })
           }
           onDelete={(id: string) =>
-            setShoppingList((prev) => prev.filter((i) => i.id !== id))
+            updateSharedData({ shoppingList: shoppingList.filter((i) => i.id !== id) })
           }
           onClearDone={() =>
-            setShoppingList((prev) => prev.filter((i) => !i.checked))
+            updateSharedData({ shoppingList: shoppingList.filter((i) => !i.checked) })
           }
         />
       )}
