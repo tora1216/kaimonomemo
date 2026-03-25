@@ -12,6 +12,8 @@ import {
   TrashIcon,
   MagnifyingGlassIcon,
   XMarkIcon,
+  LinkIcon,
+  KeyIcon,
 } from "@heroicons/react/24/outline";
 import {
   DndContext,
@@ -35,7 +37,11 @@ import type { Category, Store, Item, PriceEntry, ShoppingItem } from "@/lib/type
 import { CATEGORY_COLORS, EMOJI_OPTIONS, ICON_BTN } from "@/lib/constants";
 import { DEFAULT_CATEGORIES, DEFAULT_STORES } from "@/lib/defaultData";
 import { uid, calcUnitPrice, loadHistory, updateHistory } from "@/lib/utils";
-import { initSharedData, subscribeSharedData, updateSharedData } from "@/lib/firestore";
+import { initSharedData, subscribeSharedData, updateSharedData, setCurrentRoom } from "@/lib/firestore";
+import {
+  getOrCreateRoomId, getRoomShareUrl,
+  getStoredPassphrase, storePassphrase, buildFirestoreKey, isFirstJoin,
+} from "@/lib/room";
 import { APP_VERSION, CHANGELOG } from "@/lib/changelog";
 
 // ===================== Main App =====================
@@ -58,6 +64,12 @@ export default function Home() {
   const [searchQuery,  setSearchQuery]  = useState("");
   const [showSearch,   setShowSearch]   = useState(false);
   const [memoHistory,  setMemoHistory]  = useState<string[]>([]);
+  const [roomId,              setRoomId]              = useState("");
+  const [firestoreKey,        setFirestoreKey]        = useState<string | null>(null);
+  const [copied,              setCopied]              = useState(false);
+  const [showPassphraseJoin,  setShowPassphraseJoin]  = useState(false);
+  const [showPassphraseSetting, setShowPassphraseSetting] = useState(false);
+  const roomIdRef = useRef("");
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const sensors = useSensors(
@@ -66,14 +78,33 @@ export default function Home() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
+  // ① 起動時: テーマ・ルームID・合言葉チェック
   useEffect(() => {
-    // theme & memo history はローカルのまま
     setMemoHistory(loadHistory("kaimono_memo_history"));
     const savedTheme = localStorage.getItem("kaimono_theme") as "light" | "dark" | null;
-    const initial = savedTheme ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-    setTheme(initial);
+    setTheme(savedTheme ?? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"));
 
-    // Firestore 初期化 → リアルタイム購読
+    const id = getOrCreateRoomId();
+    roomIdRef.current = id;
+    setRoomId(id);
+
+    // 初回参加（URLからルームIDが来たが合言葉未保存）→ 合言葉ダイアログへ
+    if (isFirstJoin(id)) {
+      setShowPassphraseJoin(true);
+    } else {
+      const pass = getStoredPassphrase(id) ?? "";
+      setFirestoreKey(buildFirestoreKey(id, pass));
+    }
+  }, []);
+
+  // ② firestoreKey が確定したら Firestore 初期化 & 購読
+  useEffect(() => {
+    if (!firestoreKey) return;
+    setCurrentRoom(firestoreKey);
+    const url = new URL(window.location.href);
+    url.searchParams.set("room", roomIdRef.current);
+    window.history.replaceState({}, "", url.toString());
+
     let unsub: (() => void) | undefined;
     initSharedData().then(() => {
       unsub = subscribeSharedData((data) => {
@@ -88,7 +119,21 @@ export default function Home() {
       });
     });
     return () => { unsub?.(); };
-  }, []);
+  }, [firestoreKey]);
+
+  // 合言葉入力して参加
+  function handleJoinWithPassphrase(pass: string) {
+    storePassphrase(roomIdRef.current, pass);
+    setFirestoreKey(buildFirestoreKey(roomIdRef.current, pass));
+    setShowPassphraseJoin(false);
+  }
+
+  // 合言葉を変更（ルームキーが変わるので Firestore も切り替わる）
+  function handleChangePassphrase(newPass: string) {
+    storePassphrase(roomIdRef.current, newPass);
+    setFirestoreKey(buildFirestoreKey(roomIdRef.current, newPass));
+    setShowPassphraseSetting(false);
+  }
 
   function addToMemoHistory(value: string) {
     if (value.trim()) setMemoHistory(updateHistory("kaimono_memo_history", value));
@@ -226,6 +271,33 @@ export default function Home() {
             </span>
           </div>
           <div className="flex items-center gap-1">
+            {/* 合言葉設定ボタン */}
+            <button
+              type="button"
+              onClick={() => setShowPassphraseSetting(true)}
+              className={ICON_BTN}
+              aria-label="合言葉を設定"
+              title="合言葉を設定"
+            >
+              <KeyIcon className="h-5 w-5" />
+            </button>
+            {/* 共有ボタン */}
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(getRoomShareUrl(roomId));
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }}
+              className={`${ICON_BTN} relative`}
+              aria-label="共有リンクをコピー"
+              title="共有リンクをコピー"
+            >
+              {copied
+                ? <span className="text-[10px] font-bold text-violet-500 whitespace-nowrap">コピー済</span>
+                : <LinkIcon className="h-5 w-5" />
+              }
+            </button>
             <button
               type="button"
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
@@ -544,6 +616,17 @@ export default function Home() {
       {showSettings && (
         <SettingsDialog onClose={() => setShowSettings(false)} />
       )}
+      {showPassphraseJoin && (
+        <PassphraseJoinDialog roomId={roomId} onJoin={handleJoinWithPassphrase} />
+      )}
+      {showPassphraseSetting && (
+        <PassphraseSettingDialog
+          roomId={roomId}
+          currentPassphrase={getStoredPassphrase(roomId) ?? ""}
+          onSave={handleChangePassphrase}
+          onClose={() => setShowPassphraseSetting(false)}
+        />
+      )}
       {showShoppingList && (
         <ShoppingListSheet
           list={shoppingList}
@@ -562,6 +645,92 @@ export default function Home() {
           }
         />
       )}
+    </div>
+  );
+}
+
+// ===================== PassphraseJoinDialog =====================
+function PassphraseJoinDialog({
+  roomId, onJoin,
+}: {
+  roomId: string;
+  onJoin: (pass: string) => void;
+}) {
+  const [pass, setPass] = useState("");
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
+      <div className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-xs shadow-2xl p-6 space-y-4">
+        <div className="text-center space-y-1">
+          <div className="text-3xl mb-2">🔑</div>
+          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">合言葉を入力</h2>
+          <p className="text-xs text-slate-400 dark:text-slate-500">ルームID: <span className="font-mono font-bold">{roomId}</span></p>
+        </div>
+        <input
+          type="text"
+          value={pass}
+          onChange={(e) => setPass(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") onJoin(pass); }}
+          placeholder="合言葉（なければ空のまま）"
+          autoFocus
+          className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500"
+        />
+        <button
+          onClick={() => onJoin(pass)}
+          className="w-full py-3 rounded-2xl bg-gradient-to-r from-violet-500 to-purple-600 text-white font-semibold text-sm"
+        >
+          参加する
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ===================== PassphraseSettingDialog =====================
+function PassphraseSettingDialog({
+  roomId, currentPassphrase, onSave, onClose,
+}: {
+  roomId: string;
+  currentPassphrase: string;
+  onSave: (pass: string) => void;
+  onClose: () => void;
+}) {
+  const [pass, setPass] = useState(currentPassphrase);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-white dark:bg-slate-800 rounded-3xl w-full max-w-xs shadow-2xl p-6 space-y-4 z-10">
+        <div className="text-center space-y-1">
+          <div className="text-3xl mb-2">🔑</div>
+          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">合言葉を設定</h2>
+          <p className="text-xs text-slate-400 dark:text-slate-500">ルームID: <span className="font-mono font-bold">{roomId}</span></p>
+        </div>
+        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-3 py-2">
+          <p className="text-xs text-amber-700 dark:text-amber-400">合言葉を変更すると別のルームに切り替わります。友人に共有する前に設定してください。</p>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">合言葉</label>
+          <input
+            type="text"
+            value={pass}
+            onChange={(e) => setPass(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") onSave(pass); }}
+            placeholder="例: tanaka2026（なければ空欄）"
+            autoFocus
+            className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500"
+          />
+          <p className="text-xs text-slate-400 dark:text-slate-500">空欄にすると合言葉なしになります</p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+            キャンセル
+          </button>
+          <button onClick={() => onSave(pass)}
+            className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white text-sm font-semibold">
+            保存
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

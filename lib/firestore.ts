@@ -10,7 +10,15 @@ export type SharedData = {
   shoppingList: ShoppingItem[];
 };
 
-const sharedRef = () => doc(db, "shared", "data");
+// 現在のルームID（setCurrentRoom で設定する）
+let currentRoomId = "default";
+
+/** ルームIDをセット（アプリ起動時に一度呼ぶ） */
+export function setCurrentRoom(roomId: string): void {
+  currentRoomId = roomId;
+}
+
+const sharedRef = () => doc(db, "rooms", currentRoomId, "shared", "data");
 
 /** 初回アクセス時にデフォルトデータを書き込む */
 export async function initSharedData(): Promise<void> {
