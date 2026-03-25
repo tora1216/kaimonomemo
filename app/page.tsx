@@ -13,7 +13,6 @@ import {
   MagnifyingGlassIcon,
   XMarkIcon,
   LinkIcon,
-  KeyIcon,
 } from "@heroicons/react/24/outline";
 import {
   DndContext,
@@ -68,7 +67,6 @@ export default function Home() {
   const [firestoreKey,        setFirestoreKey]        = useState<string | null>(null);
   const [copied,              setCopied]              = useState(false);
   const [showPassphraseJoin,  setShowPassphraseJoin]  = useState(false);
-  const [showPassphraseSetting, setShowPassphraseSetting] = useState(false);
   const roomIdRef = useRef("");
   const searchInputRef = useRef<HTMLInputElement>(null);
 
@@ -132,7 +130,6 @@ export default function Home() {
   function handleChangePassphrase(newPass: string) {
     storePassphrase(roomIdRef.current, newPass);
     setFirestoreKey(buildFirestoreKey(roomIdRef.current, newPass));
-    setShowPassphraseSetting(false);
   }
 
   function addToMemoHistory(value: string) {
@@ -271,43 +268,13 @@ export default function Home() {
             </span>
           </div>
           <div className="flex items-center gap-1">
-            {/* 合言葉設定ボタン */}
-            <button
-              type="button"
-              onClick={() => setShowPassphraseSetting(true)}
-              className={ICON_BTN}
-              aria-label="合言葉を設定"
-              title="合言葉を設定"
-            >
-              <KeyIcon className="h-5 w-5" />
-            </button>
-            {/* 共有ボタン */}
-            <button
-              type="button"
-              onClick={() => {
-                navigator.clipboard.writeText(getRoomShareUrl(roomId));
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-              }}
-              className={`${ICON_BTN} relative`}
-              aria-label="共有リンクをコピー"
-              title="共有リンクをコピー"
-            >
-              {copied
-                ? <span className="text-[10px] font-bold text-violet-500 whitespace-nowrap">コピー済</span>
-                : <LinkIcon className="h-5 w-5" />
-              }
-            </button>
             <button
               type="button"
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
               className={ICON_BTN}
               aria-label="テーマ切り替え"
             >
-              {theme === "dark"
-                ? <SunIcon className="h-5 w-5" />
-                : <MoonIcon className="h-5 w-5" />
-              }
+              {theme === "dark" ? <SunIcon className="h-5 w-5" /> : <MoonIcon className="h-5 w-5" />}
             </button>
             <button
               type="button"
@@ -323,7 +290,20 @@ export default function Home() {
               className={ICON_BTN}
               aria-label="店舗管理"
             >
-              <BuildingStorefrontIcon className="h-6 w-6" />
+              <BuildingStorefrontIcon className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText(getRoomShareUrl(roomId));
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }}
+              className={`${ICON_BTN} ${copied ? "text-violet-500 dark:text-violet-400" : ""}`}
+              aria-label="共有リンクをコピー"
+              title={copied ? "コピー済！" : "共有リンクをコピー"}
+            >
+              <LinkIcon className="h-5 w-5" />
             </button>
             <button
               type="button"
@@ -535,7 +515,7 @@ export default function Home() {
       {/* ── FAB (add) ── */}
       <button
         onClick={() => setShowAddDialog(true)}
-        className="fixed bottom-6 right-6 w-14 h-14 md:w-16 md:h-16 bg-gradient-to-br from-violet-500 to-purple-600 text-white rounded-full shadow-xl text-2xl md:text-3xl flex items-center justify-center hover:scale-110 active:scale-95 transition-transform z-20"
+        className="fixed bottom-6 right-6 w-14 h-14 md:w-16 md:h-16 bg-[#22C55E] hover:bg-green-400 text-white rounded-full shadow-xl text-2xl md:text-3xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-20"
       >
         ＋
       </button>
@@ -614,18 +594,15 @@ export default function Home() {
         />
       )}
       {showSettings && (
-        <SettingsDialog onClose={() => setShowSettings(false)} />
+        <SettingsDialog
+          onClose={() => setShowSettings(false)}
+          roomId={roomId}
+          passphrase={getStoredPassphrase(roomId) ?? ""}
+          onPassphraseSave={handleChangePassphrase}
+        />
       )}
       {showPassphraseJoin && (
         <PassphraseJoinDialog roomId={roomId} onJoin={handleJoinWithPassphrase} />
-      )}
-      {showPassphraseSetting && (
-        <PassphraseSettingDialog
-          roomId={roomId}
-          currentPassphrase={getStoredPassphrase(roomId) ?? ""}
-          onSave={handleChangePassphrase}
-          onClose={() => setShowPassphraseSetting(false)}
-        />
       )}
       {showShoppingList && (
         <ShoppingListSheet
@@ -670,7 +647,7 @@ function PassphraseJoinDialog({
           value={pass}
           onChange={(e) => setPass(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter") onJoin(pass); }}
-          placeholder="合言葉（なければ空のまま）"
+          placeholder="例: toyama（なければ空のまま）"
           autoFocus
           className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500"
         />
@@ -680,56 +657,6 @@ function PassphraseJoinDialog({
         >
           参加する
         </button>
-      </div>
-    </div>
-  );
-}
-
-// ===================== PassphraseSettingDialog =====================
-function PassphraseSettingDialog({
-  roomId, currentPassphrase, onSave, onClose,
-}: {
-  roomId: string;
-  currentPassphrase: string;
-  onSave: (pass: string) => void;
-  onClose: () => void;
-}) {
-  const [pass, setPass] = useState(currentPassphrase);
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-white dark:bg-slate-800 rounded-3xl w-full max-w-xs shadow-2xl p-6 space-y-4 z-10">
-        <div className="text-center space-y-1">
-          <div className="text-3xl mb-2">🔑</div>
-          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">合言葉を設定</h2>
-          <p className="text-xs text-slate-400 dark:text-slate-500">ルームID: <span className="font-mono font-bold">{roomId}</span></p>
-        </div>
-        <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-xl px-3 py-2">
-          <p className="text-xs text-amber-700 dark:text-amber-400">合言葉を変更すると別のルームに切り替わります。友人に共有する前に設定してください。</p>
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">合言葉</label>
-          <input
-            type="text"
-            value={pass}
-            onChange={(e) => setPass(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") onSave(pass); }}
-            placeholder="例: tanaka2026（なければ空欄）"
-            autoFocus
-            className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500"
-          />
-          <p className="text-xs text-slate-400 dark:text-slate-500">空欄にすると合言葉なしになります</p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
-            キャンセル
-          </button>
-          <button onClick={() => onSave(pass)}
-            className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white text-sm font-semibold">
-            保存
-          </button>
-        </div>
       </div>
     </div>
   );
@@ -848,8 +775,21 @@ function PriceDetailSheet({
   // アイテム削除確認フラグ
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  // カテゴリ変更の保留（確認前は適用しない）
+  const [pendingCategoryId, setPendingCategoryId] = useState<string | null>(null);
+  const [confirmCatChange,  setConfirmCatChange]  = useState(false);
+
   const currentItem  = items.find((i) => i.id === item.id) ?? item;
   const sortedPrices = [...currentItem.prices].sort((a, b) => a.price - b.price);
+
+  // 閉じる前にカテゴリ変更が保留中なら確認ダイアログを出す
+  function handleClose() {
+    if (pendingCategoryId !== null && pendingCategoryId !== currentItem.categoryId) {
+      setConfirmCatChange(true);
+    } else {
+      onClose();
+    }
+  }
 
   function handleAdd(e: React.SyntheticEvent) {
     e.preventDefault();
@@ -881,7 +821,7 @@ function PriceDetailSheet({
 
   return (
     <div className="fixed inset-0 z-40 flex flex-col justify-end md:items-center md:justify-center md:p-4">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
       <div className="relative bg-white dark:bg-slate-800 rounded-t-3xl md:rounded-3xl max-h-[85vh] flex flex-col z-10 shadow-2xl w-full md:max-w-lg">
         <div className="flex justify-center pt-3 pb-1 md:hidden">
           <div className="w-10 h-1 bg-slate-200 dark:bg-slate-600 rounded-full" />
@@ -893,21 +833,28 @@ function PriceDetailSheet({
               <TrashIcon className="h-4 w-4" />
               削除
             </button>
-            <button onClick={onClose} className="text-slate-300 dark:text-slate-500 hover:text-slate-500 dark:hover:text-slate-300 text-xl p-1">✕</button>
+            <button onClick={handleClose} className="text-slate-300 dark:text-slate-500 hover:text-slate-500 dark:hover:text-slate-300 text-xl p-1">✕</button>
           </div>
         </div>
         {/* カテゴリ変更 */}
-        <div className="flex items-center gap-2 px-5 pb-2 flex-wrap">
-          {categories.map((cat) => {
-            const colors = CATEGORY_COLORS[cat.colorIndex % CATEGORY_COLORS.length];
-            const isActive = currentItem.categoryId === cat.id;
-            return (
-              <button key={cat.id} type="button" onClick={() => !isActive && onChangeCategory(cat.id)}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all ${isActive ? colors.activeTab + " shadow-sm" : colors.tab + " hover:opacity-80"}`}>
-                {cat.emoji} {cat.name}
-              </button>
-            );
-          })}
+        <div className="px-5 pb-3 border-b border-slate-100 dark:border-slate-700">
+          <p className="text-xs text-slate-400 dark:text-slate-500 font-medium mb-2">カテゴリ</p>
+          <div className="flex flex-wrap gap-1.5">
+            {categories.map((cat) => {
+              const colors = CATEGORY_COLORS[cat.colorIndex % CATEGORY_COLORS.length];
+              const effectiveCatId = pendingCategoryId ?? currentItem.categoryId;
+              const isActive = effectiveCatId === cat.id;
+              return (
+                <button key={cat.id} type="button"
+                  onClick={() => !isActive && setPendingCategoryId(cat.id)}
+                  title={cat.name}
+                  className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-all ${isActive ? colors.activeTab + " shadow-sm" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:opacity-80"}`}>
+                  <span>{cat.emoji}</span>
+                  {isActive && <span>{cat.name}</span>}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* ショッピングリンク */}
@@ -962,13 +909,24 @@ function PriceDetailSheet({
                     ? calcUnitPrice(parseInt(editPrice) || 0, parseFloat(editQty), editUnit)
                     : null;
                   return (
-                    <div key={entry.id} className="rounded-xl border border-violet-200 dark:border-violet-700 bg-violet-50 dark:bg-violet-900/20 p-3 space-y-2">
+                    <div key={entry.id} className="rounded-xl border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-700/50 p-3 space-y-2">
                       <select value={editStore} onChange={(e) => setEditStore(e.target.value)}
                         className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600">
                         {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                       </select>
-                      <input type="number" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} placeholder="金額（円）" min="0"
-                        className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
+                      <div>
+                        <input type="number" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} placeholder="金額（円）" min="0"
+                          className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
+                        <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                          {[5, 10, 15, 20].map((pct) => (
+                            <button key={pct} type="button"
+                              onClick={() => { const p = parseInt(editPrice); if (p > 0) setEditPrice(String(Math.round(p * (1 - pct / 100)))); }}
+                              className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors">
+                              -{pct}%
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                       <div>
                         <div className="flex items-center gap-2">
                           <input type="number" value={editQty} onChange={(e) => setEditQty(e.target.value)} placeholder="数量" min="0" step="any"
@@ -1060,6 +1018,15 @@ function PriceDetailSheet({
                 <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">金額（円）</label>
                 <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="例: 198" min="0" required
                   className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
+                <div className="flex gap-1.5 mt-1.5 flex-wrap">
+                  {[5, 10, 15, 20].map((pct) => (
+                    <button key={pct} type="button"
+                      onClick={() => { const p = parseInt(price); if (p > 0) setPrice(String(Math.round(p * (1 - pct / 100)))); }}
+                      className="px-2.5 py-1 rounded-full text-xs font-medium bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors">
+                      -{pct}%
+                    </button>
+                  ))}
+                </div>
               </div>
               <div>
                 <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">数量・単位（任意）</label>
@@ -1137,6 +1104,29 @@ function PriceDetailSheet({
             </div>
           </div>
         )}
+
+        {/* カテゴリ変更確認 */}
+        {confirmCatChange && pendingCategoryId && (() => {
+          const newCat = categories.find((c) => c.id === pendingCategoryId);
+          return (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4 rounded-t-3xl md:rounded-3xl bg-white/95 dark:bg-slate-800/95 px-8 text-center">
+              <div className="text-3xl">{newCat?.emoji}</div>
+              <p className="text-sm font-bold text-slate-800 dark:text-slate-100">
+                カテゴリを「{newCat?.name}」に変更しますか？
+              </p>
+              <div className="flex gap-3 w-full max-w-xs">
+                <button onClick={() => { setConfirmCatChange(false); setPendingCategoryId(null); }}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                  変更しない
+                </button>
+                <button onClick={() => { onChangeCategory(pendingCategoryId); onClose(); }}
+                  className="flex-1 py-2.5 rounded-xl bg-violet-500 text-white text-sm font-semibold hover:bg-violet-600 transition-colors">
+                  変更する
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </div>
     </div>
   );
@@ -1160,11 +1150,20 @@ function AddDialog({
   const [memo,        setMemo]        = useState("");
   const [quantity,    setQuantity]    = useState("");
   const [unit,        setUnit]        = useState("");
+  const [formError,   setFormError]   = useState("");
+  const itemNameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    itemNameRef.current?.focus({ preventScroll: true });
+  }, []);
 
   function handleSubmit(e: React.SyntheticEvent) {
     e.preventDefault();
+    if (!itemName.trim()) { setFormError("商品名を入力してください。"); return; }
+    if (!storeId)         { setFormError("店舗を選択してください。"); return; }
     const p = parseInt(price);
-    if (!itemName.trim() || !storeId || !p) return;
+    if (!p || p <= 0)     { setFormError("金額を入力してください。"); return; }
+    setFormError("");
     const qty = quantity ? parseFloat(quantity) : undefined;
     onSubmit(itemName.trim(), categoryId, storeId, p, memo, qty, unit || undefined);
   }
@@ -1180,7 +1179,7 @@ function AddDialog({
           <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">価格を記録</h2>
           <button onClick={onClose} className="text-slate-300 dark:text-slate-500 hover:text-slate-500 dark:hover:text-slate-300 text-xl p-1">✕</button>
         </div>
-        <form onSubmit={handleSubmit} className="px-5 pb-8 space-y-4">
+        <form onSubmit={handleSubmit} className="px-5 pb-8 space-y-4 overflow-y-auto max-h-[75vh]">
           {/* カテゴリを先頭に */}
           <div>
             <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">カテゴリ</label>
@@ -1197,25 +1196,40 @@ function AddDialog({
             </div>
           </div>
           <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">商品名</label>
-            <input type="text" value={itemName} onChange={(e) => setItemName(e.target.value)} placeholder="例: 牛乳" required autoFocus
+            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+              商品名 *
+            </label>
+            <input ref={itemNameRef} type="text" value={itemName} onChange={(e) => setItemName(e.target.value)} placeholder="例: 牛乳"
               className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
           </div>
           <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">店舗</label>
-            <select value={storeId} onChange={(e) => setStoreId(e.target.value)} required
+            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+              店舗 *
+            </label>
+            <select value={storeId} onChange={(e) => setStoreId(e.target.value)}
               className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200">
               {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
           <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">金額（円）</label>
-            <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="例: 198" required min="0"
+            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+              金額（円） *
+            </label>
+            <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="例: 198" min="0"
               className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
+            <div className="flex gap-1.5 mt-1.5 flex-wrap">
+              {[5, 10, 15, 20].map((pct) => (
+                <button key={pct} type="button"
+                  onClick={() => { const p = parseInt(price); if (p > 0) setPrice(String(Math.round(p * (1 - pct / 100)))); }}
+                  className="px-2.5 py-1 rounded-full text-xs font-medium bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors">
+                  -{pct}%
+                </button>
+              ))}
+            </div>
           </div>
           <div>
             <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">数量・単位（任意）</label>
-            <div className="flex items-center gap-2 mt-1">
+            <div className="flex flex-wrap items-center gap-2 mt-1">
               <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="例: 500" min="0" step="any"
                 className="w-24 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
               <div className="flex flex-wrap gap-1.5">
@@ -1245,6 +1259,11 @@ function AddDialog({
               {memoHistory.map((h) => <option key={h} value={h} />)}
             </datalist>
           </div>
+          {formError && (
+            <p className="text-xs text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-3 py-2">
+              {formError}
+            </p>
+          )}
           <button type="submit"
             className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-violet-500 to-purple-600 text-white font-semibold text-base shadow-md hover:shadow-lg transition-shadow">
             追加する
@@ -1437,9 +1456,17 @@ function CategoryManagerDialog({
 }
 
 // ===================== SettingsDialog =====================
-function SettingsDialog({ onClose }: { onClose: () => void }) {
-  const [isIOS,       setIsIOS]       = useState(false);
-  const [isInstalled, setIsInstalled] = useState(false);
+function SettingsDialog({
+  onClose, roomId, passphrase, onPassphraseSave,
+}: {
+  onClose: () => void;
+  roomId: string;
+  passphrase: string;
+  onPassphraseSave: (pass: string) => void;
+}) {
+  const [passInput,    setPassInput]    = useState(passphrase);
+  const [isIOS,        setIsIOS]        = useState(false);
+  const [isInstalled,  setIsInstalled]  = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<Event & { prompt: () => void; userChoice: Promise<{ outcome: string }> } | null>(null);
 
   useEffect(() => {
@@ -1472,6 +1499,66 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
           <button onClick={onClose} className="text-slate-300 dark:text-slate-500 hover:text-slate-500 dark:hover:text-slate-300 text-xl p-1">✕</button>
         </div>
         <div className="p-5 space-y-4 overflow-y-auto max-h-[75vh]">
+
+          {/* ホーム画面に追加（未インストール＆対応端末のみ表示） */}
+          {!isInstalled && (isIOS || deferredPrompt) && (
+            <div className="rounded-2xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-900/20 p-4">
+              <div className="flex items-center gap-2 mb-3">
+                <ArrowUpOnSquareIcon className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                <span className="text-sm font-bold text-emerald-800 dark:text-emerald-300">ホーム画面に追加</span>
+              </div>
+              {isIOS ? (
+                <ol className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+                  <li className="flex items-start gap-2">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white dark:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300">1</span>
+                    <span>画面下部の共有ボタン（<ArrowUpOnSquareIcon className="h-3.5 w-3.5 inline" />）をタップ</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white dark:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300">2</span>
+                    <span>「ホーム画面に追加」を選択</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white dark:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300">3</span>
+                    <span>「追加」をタップして完了</span>
+                  </li>
+                </ol>
+              ) : (
+                <button onClick={handleInstall} className="w-full rounded-xl bg-[#22C55E] py-2.5 text-sm font-semibold text-white transition hover:bg-green-400">
+                  ホーム画面にインストール
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* グループ設定 */}
+          <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
+            <span className="text-sm font-bold text-slate-800 dark:text-white">グループ設定</span>
+            <div className="space-y-1">
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">ルームID</p>
+              <span className="block font-mono text-sm font-bold text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-700/50 rounded-xl px-3 py-2">{roomId}</span>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">合言葉（任意）</p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={passInput}
+                  onChange={(e) => setPassInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") onPassphraseSave(passInput); }}
+                  placeholder="例: toyama（なければ空欄）"
+                  className="flex-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500"
+                />
+                <button
+                  onClick={() => onPassphraseSave(passInput)}
+                  className="px-3 py-2 rounded-xl bg-violet-500 text-white text-xs font-semibold hover:bg-violet-600 transition-colors"
+                >
+                  保存
+                </button>
+              </div>
+              <p className="text-xs text-slate-400 dark:text-slate-500">友人には URL と合言葉を別々に伝えてください</p>
+            </div>
+          </div>
+
           {/* アップデート情報 */}
           <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4">
             <div className="mb-3 flex items-center justify-between">
@@ -1480,7 +1567,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
                 v{APP_VERSION}
               </span>
             </div>
-            <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+            <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
               {CHANGELOG.map((entry, i) => (
                 <div key={entry.version}>
                   <div className="flex items-center gap-2 mb-1.5">
@@ -1488,9 +1575,7 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
                       i === 0
                         ? "bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-400"
                         : "bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400"
-                    }`}>
-                      v{entry.version}
-                    </span>
+                    }`}>v{entry.version}</span>
                     <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">{entry.title}</span>
                     <span className="ml-auto text-[10px] text-slate-400">{entry.date}</span>
                   </div>
@@ -1502,49 +1587,10 @@ function SettingsDialog({ onClose }: { onClose: () => void }) {
                       </li>
                     ))}
                   </ul>
-                  {i < CHANGELOG.length - 1 && (
-                    <div className="mt-3 border-b border-slate-100 dark:border-slate-700" />
-                  )}
+                  {i < CHANGELOG.length - 1 && <div className="mt-3 border-b border-slate-100 dark:border-slate-700" />}
                 </div>
               ))}
             </div>
-          </div>
-
-          {/* ホーム画面に追加 */}
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <ArrowUpOnSquareIcon className="h-5 w-5 text-slate-500 dark:text-slate-400" />
-              <span className="text-sm font-bold text-slate-800 dark:text-white">ホーム画面に追加</span>
-            </div>
-            {isInstalled ? (
-              <p className="text-sm text-slate-500 dark:text-slate-400">すでにホーム画面に追加されています。</p>
-            ) : isIOS ? (
-              <ol className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
-                <li className="flex items-start gap-2">
-                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300">1</span>
-                  <span>画面下部の共有ボタン（<ArrowUpOnSquareIcon className="h-3.5 w-3.5 inline" />）をタップ</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300">2</span>
-                  <span>「ホーム画面に追加」を選択</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300">3</span>
-                  <span>「追加」をタップして完了</span>
-                </li>
-              </ol>
-            ) : deferredPrompt ? (
-              <button
-                onClick={handleInstall}
-                className="w-full rounded-xl bg-[#22C55E] py-2.5 text-sm font-semibold text-white transition hover:bg-green-400"
-              >
-                ホーム画面にインストール
-              </button>
-            ) : (
-              <p className="text-sm text-slate-500 dark:text-slate-400">
-                ブラウザのメニューから「ホーム画面に追加」を選択してください。
-              </p>
-            )}
           </div>
         </div>
       </div>

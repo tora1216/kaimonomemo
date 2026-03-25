@@ -11,10 +11,11 @@ export const CHANGELOG: ChangelogEntry[] = [
   {
     version: "1.2.0",
     date: "2026-03-25",
-    title: "Firebase リアルタイム同期",
+    title: "データの共有",
     changes: [
-      "Firebase Firestore によるデータのリアルタイム共有",
-      "Vercel へのデプロイ対応",
+      "Firebase Firestoreによるデータ共有",
+      "ルームIDで家族や友人とデータ共有",
+      "合言葉によるルーム保護（設定画面から変更可）",
     ],
   },
   {
