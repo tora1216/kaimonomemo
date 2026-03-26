@@ -171,18 +171,18 @@ export default function Home() {
     updateSharedData({ items: newItems });
   }
 
-  function handleAddSubmit(itemName: string, categoryId: string, storeId: string) {
+  function handleAddSubmit(itemName: string, categoryId: string) {
     const target = items.find((i) => i.name === itemName && i.categoryId === categoryId);
     const finalItem = target ?? { id: uid(), categoryId, name: itemName, prices: [] };
     if (!target) updateSharedData({ items: [...items, finalItem] });
     setActiveCategory(categoryId);
-    setSelectedItemDefaultStore(storeId);
+    setSelectedItemDefaultStore(stores[0]?.id ?? "");
     setSelectedItem(finalItem);
     setShowAddDialog(false);
   }
 
-  function handleAddPriceForItem(itemId: string, storeId: string, price: number, memo: string, quantity?: number, unit?: string) {
-    const entry: PriceEntry = { id: uid(), storeId, price, memo, date: new Date().toISOString().split("T")[0], ...(quantity && unit ? { quantity, unit } : {}) };
+  function handleAddPriceForItem(itemId: string, storeId: string, price: number, memo: string, quantity?: number, unit?: string, discountPct?: number) {
+    const entry: PriceEntry = { id: uid(), storeId, price, memo, date: new Date().toISOString().split("T")[0], ...(quantity && unit ? { quantity, unit } : {}), ...(discountPct ? { discountPct } : {}) };
     const newItems = items.map((i) => (i.id === itemId ? { ...i, prices: [...i.prices, entry] } : i));
     updateSharedData({ items: newItems });
     addToMemoHistory(memo);
@@ -201,7 +201,7 @@ export default function Home() {
   function handleEditEntry(
     itemId: string,
     entryId: string,
-    updates: { storeId: string; price: number; memo: string; quantity?: number; unit?: string },
+    updates: { storeId: string; price: number; memo: string; quantity?: number; unit?: string; discountPct?: number },
   ) {
     const date = new Date().toISOString().split("T")[0];
     const newItems = items.map((i) =>
@@ -566,7 +566,7 @@ export default function Home() {
           defaultStoreId={selectedItemDefaultStore || undefined}
           initialShowForm={!!selectedItemDefaultStore}
           onClose={() => { setSelectedItem(null); setSelectedItemDefaultStore(""); }}
-          onAddPrice={(storeId, price, memo, quantity, unit) => handleAddPriceForItem(selectedItem.id, storeId, price, memo, quantity, unit)}
+          onAddPrice={(storeId, price, memo, quantity, unit, discountPct) => handleAddPriceForItem(selectedItem.id, storeId, price, memo, quantity, unit, discountPct)}
           onDeleteEntry={(entryId) => handleDeleteEntry(selectedItem.id, entryId)}
           onEditEntry={(entryId, updates) => handleEditEntry(selectedItem.id, entryId, updates)}
           onDeleteItem={() => handleDeleteItem(selectedItem.id)}
@@ -576,7 +576,6 @@ export default function Home() {
       {showAddDialog && (
         <AddDialog
           categories={categories}
-          stores={stores}
           defaultCategoryId={activeCategory}
           onClose={() => setShowAddDialog(false)}
           onSubmit={handleAddSubmit}
@@ -753,7 +752,15 @@ function SortableItemCard({
 }
 
 // ===================== PriceDetailSheet =====================
-type EntryUpdates = { storeId: string; price: number; memo: string; quantity?: number; unit?: string };
+type EntryUpdates = { storeId: string; price: number; memo: string; quantity?: number; unit?: string; discountPct?: number };
+
+function applyModifiers(base: string, discount: number | null, tax: number | null): string {
+  const p = parseInt(base);
+  if (!p || isNaN(p)) return base;
+  const d = discount != null ? (1 - discount / 100) : 1;
+  const t = tax != null ? (1 + tax / 100) : 1;
+  return String(Math.round(p * d * t));
+}
 
 function PriceDetailSheet({
   item, items, stores, categories, memoHistory, defaultStoreId, initialShowForm, onClose, onAddPrice, onDeleteEntry, onEditEntry, onDeleteItem, onChangeCategory,
@@ -766,26 +773,33 @@ function PriceDetailSheet({
   defaultStoreId?: string;
   initialShowForm?: boolean;
   onClose: () => void;
-  onAddPrice: (storeId: string, price: number, memo: string, quantity?: number, unit?: string) => void;
+  onAddPrice: (storeId: string, price: number, memo: string, quantity?: number, unit?: string, discountPct?: number) => void;
   onDeleteEntry: (entryId: string) => void;
   onEditEntry: (entryId: string, updates: EntryUpdates) => void;
   onDeleteItem: () => void;
   onChangeCategory: (categoryId: string) => void;
 }) {
-  const [showForm,  setShowForm]  = useState(initialShowForm ?? false);
-  const [storeId,   setStoreId]   = useState(defaultStoreId ?? (stores[0]?.id ?? ""));
-  const [price,     setPrice]     = useState("");
-  const [memo,      setMemo]      = useState("");
-  const [quantity,  setQuantity]  = useState("");
-  const [unit,      setUnit]      = useState("");
+  const [showForm,     setShowForm]     = useState(initialShowForm ?? false);
+  const [storeId,      setStoreId]      = useState(defaultStoreId ?? (stores[0]?.id ?? ""));
+  const [basePrice,    setBasePrice]    = useState("");
+  const [memo,         setMemo]         = useState("");
+  const [quantity,     setQuantity]     = useState("");
+  const [unit,         setUnit]         = useState("");
+  const [discountPct,  setDiscountPct]  = useState<number | null>(null);
+  const [taxPct,       setTaxPct]       = useState<number | null>(null);
 
   // 編集中エントリの state
-  const [editingId,  setEditingId]  = useState<string | null>(null);
-  const [editStore,  setEditStore]  = useState("");
-  const [editPrice,  setEditPrice]  = useState("");
-  const [editMemo,   setEditMemo]   = useState("");
-  const [editQty,    setEditQty]    = useState("");
-  const [editUnit,   setEditUnit]   = useState("");
+  const [editingId,       setEditingId]       = useState<string | null>(null);
+  const [editStore,       setEditStore]       = useState("");
+  const [editBasePrice,   setEditBasePrice]   = useState("");
+  const [editMemo,        setEditMemo]        = useState("");
+  const [editQty,         setEditQty]         = useState("");
+  const [editUnit,        setEditUnit]        = useState("");
+  const [editDiscountPct, setEditDiscountPct] = useState<number | null>(null);
+  const [editTaxPct,      setEditTaxPct]      = useState<number | null>(null);
+
+  const price     = applyModifiers(basePrice,     discountPct, taxPct);
+  const editPrice = applyModifiers(editBasePrice, editDiscountPct, editTaxPct);
 
   // アイテム削除確認フラグ
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -811,17 +825,23 @@ function PriceDetailSheet({
     const p = parseInt(price);
     if (!p || !storeId) return;
     const qty = quantity ? parseFloat(quantity) : undefined;
-    onAddPrice(storeId, p, memo, qty, unit || undefined);
-    setPrice(""); setMemo(""); setQuantity(""); setUnit(""); setShowForm(false);
+    onAddPrice(storeId, p, memo, qty, unit || undefined, discountPct ?? undefined);
+    setBasePrice(""); setMemo(""); setQuantity(""); setUnit(""); setDiscountPct(null); setTaxPct(null); setShowForm(false);
   }
 
   function startEdit(entry: PriceEntry) {
     setEditingId(entry.id);
     setEditStore(entry.storeId);
-    setEditPrice(String(entry.price));
+    // 保存時に割引が適用されていた場合、元の価格を逆算して復元する
+    const base = entry.discountPct
+      ? Math.round(entry.price / (1 - entry.discountPct / 100))
+      : entry.price;
+    setEditBasePrice(String(base));
     setEditMemo(entry.memo ?? "");
     setEditQty(entry.quantity ? String(entry.quantity) : "");
     setEditUnit(entry.unit ?? "");
+    setEditDiscountPct(entry.discountPct ?? null);
+    setEditTaxPct(null);
     setShowForm(false);
   }
 
@@ -830,7 +850,7 @@ function PriceDetailSheet({
     const p = parseInt(editPrice);
     if (!p) return;
     const qty = editQty ? parseFloat(editQty) : undefined;
-    onEditEntry(editingId, { storeId: editStore, price: p, memo: editMemo, quantity: qty, unit: editUnit || undefined });
+    onEditEntry(editingId, { storeId: editStore, price: p, memo: editMemo, quantity: qty, unit: editUnit || undefined, discountPct: editDiscountPct ?? undefined });
     setEditingId(null);
   }
 
@@ -914,14 +934,23 @@ function PriceDetailSheet({
                         {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                       </select>
                       <div>
-                        <input type="number" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} placeholder="金額（円）" min="0"
+                        <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">金額（円）<span className="ml-1.5 font-normal text-slate-400 dark:text-slate-500">※税込み価格を入力</span></label>
+                        <input type="number" value={editPrice} onChange={(e) => { setEditBasePrice(e.target.value); setEditDiscountPct(null); setEditTaxPct(null); }} placeholder="金額（円）" min="0"
                           className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
                         <div className="flex gap-1.5 mt-1.5 flex-wrap">
                           {[5, 10, 15, 20].map((pct) => (
                             <button key={pct} type="button"
-                              onClick={() => { const p = parseInt(editPrice); if (p > 0) setEditPrice(String(Math.round(p * (1 - pct / 100)))); }}
-                              className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors">
+                              onClick={() => setEditDiscountPct(editDiscountPct === pct ? null : pct)}
+                              className={`px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors ${editDiscountPct === pct ? "bg-orange-500 text-white border-orange-500" : "bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-900/30"}`}>
                               -{pct}%
+                            </button>
+                          ))}
+                          <span className="text-slate-300 dark:text-slate-600 text-xs self-center">|</span>
+                          {[8, 10].map((pct) => (
+                            <button key={pct} type="button"
+                              onClick={() => setEditTaxPct(editTaxPct === pct ? null : pct)}
+                              className={`px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors ${editTaxPct === pct ? "bg-blue-500 text-white border-blue-500" : "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/30"}`}>
+                              +{pct}%税
                             </button>
                           ))}
                         </div>
@@ -970,8 +999,13 @@ function PriceDetailSheet({
                     }`}
                   >
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-slate-700 dark:text-slate-200">{store?.name ?? "不明"}</span>
+                        {entry.discountPct && (
+                          <span className="px-1.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400">
+                            -{entry.discountPct}%
+                          </span>
+                        )}
                       </div>
                       {entry.memo && <div className="text-xs text-slate-400 dark:text-slate-500 mt-0.5">{entry.memo}</div>}
                       <div className="text-xs text-slate-300 dark:text-slate-600 mt-0.5">{entry.date}</div>
@@ -1011,15 +1045,23 @@ function PriceDetailSheet({
                 </select>
               </div>
               <div>
-                <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">金額（円）</label>
-                <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="例: 198" min="0" required
+                <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">金額（円）<span className="ml-1.5 font-normal text-slate-400 dark:text-slate-500">※税込み価格を入力</span></label>
+                <input type="number" value={price} onChange={(e) => { setBasePrice(e.target.value); setDiscountPct(null); setTaxPct(null); }} placeholder="例: 198" min="0" required
                   className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
                 <div className="flex gap-1.5 mt-1.5 flex-wrap">
                   {[5, 10, 15, 20].map((pct) => (
                     <button key={pct} type="button"
-                      onClick={() => { const p = parseInt(price); if (p > 0) setPrice(String(Math.round(p * (1 - pct / 100)))); }}
-                      className="px-2.5 py-1 rounded-full text-xs font-medium bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors">
+                      onClick={() => setDiscountPct(discountPct === pct ? null : pct)}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${discountPct === pct ? "bg-orange-500 text-white border-orange-500" : "bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-900/30"}`}>
                       -{pct}%
+                    </button>
+                  ))}
+                  <span className="text-slate-300 dark:text-slate-600 text-xs self-center">|</span>
+                  {[8, 10].map((pct) => (
+                    <button key={pct} type="button"
+                      onClick={() => setTaxPct(taxPct === pct ? null : pct)}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${taxPct === pct ? "bg-blue-500 text-white border-blue-500" : "bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/30"}`}>
+                      +{pct}%税
                     </button>
                   ))}
                 </div>
@@ -1130,25 +1172,22 @@ function PriceDetailSheet({
 
 // ===================== AddDialog =====================
 function AddDialog({
-  categories, stores, defaultCategoryId, onClose, onSubmit,
+  categories, defaultCategoryId, onClose, onSubmit,
 }: {
   categories: Category[];
-  stores: Store[];
   defaultCategoryId: string;
   onClose: () => void;
-  onSubmit: (itemName: string, categoryId: string, storeId: string) => void;
+  onSubmit: (itemName: string, categoryId: string) => void;
 }) {
   const [categoryId,  setCategoryId]  = useState(defaultCategoryId);
   const [itemName,    setItemName]    = useState("");
-  const [storeId,     setStoreId]     = useState(stores[0]?.id ?? "");
   const [formError,   setFormError]   = useState("");
 
   function handleSubmit(e: React.SyntheticEvent) {
     e.preventDefault();
     if (!itemName.trim()) { setFormError("商品名を入力してください。"); return; }
-    if (!storeId)         { setFormError("店舗を選択してください。"); return; }
     setFormError("");
-    onSubmit(itemName.trim(), categoryId, storeId);
+    onSubmit(itemName.trim(), categoryId);
   }
 
   return (
@@ -1184,15 +1223,6 @@ function AddDialog({
             </label>
             <input type="text" value={itemName} onChange={(e) => setItemName(e.target.value)} placeholder="例: 牛乳"
               className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
-          </div>
-          <div className="pb-2">
-            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-              店舗 *
-            </label>
-            <select value={storeId} onChange={(e) => setStoreId(e.target.value)}
-              className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200">
-              {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
           </div>
           {formError && (
             <p className="text-xs text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-3 py-2">

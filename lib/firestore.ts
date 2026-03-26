@@ -49,5 +49,7 @@ export function subscribeSharedData(
 export async function updateSharedData(
   partial: Partial<SharedData>,
 ): Promise<void> {
-  await setDoc(sharedRef(), partial, { merge: true });
+  // Firestore は undefined を許容しないため JSON ラウンドトリップで除去する
+  const cleaned = JSON.parse(JSON.stringify(partial)) as Partial<SharedData>;
+  await setDoc(sharedRef(), cleaned, { merge: true });
 }
