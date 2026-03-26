@@ -8,6 +8,7 @@ export type Category = {
 export type Store = {
   id: string;
   name: string;
+  memo?: string;
 };
 
 export type PriceEntry = {
