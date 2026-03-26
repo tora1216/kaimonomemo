@@ -13,6 +13,7 @@ import {
   MagnifyingGlassIcon,
   XMarkIcon,
   LinkIcon,
+  Bars3Icon,
 } from "@heroicons/react/24/outline";
 import {
   DndContext,
@@ -65,7 +66,7 @@ export default function Home() {
   const [memoHistory,  setMemoHistory]  = useState<string[]>([]);
   const [roomId,              setRoomId]              = useState("");
   const [firestoreKey,        setFirestoreKey]        = useState<string | null>(null);
-  const [copied,              setCopied]              = useState(false);
+  const [selectedItemDefaultStore, setSelectedItemDefaultStore] = useState("");
   const [showPassphraseJoin,  setShowPassphraseJoin]  = useState(false);
   const roomIdRef = useRef("");
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -170,14 +171,13 @@ export default function Home() {
     updateSharedData({ items: newItems });
   }
 
-  function handleAddSubmit(itemName: string, categoryId: string, storeId: string, price: number, memo: string, quantity?: number, unit?: string) {
-    const entry: PriceEntry = { id: uid(), storeId, price, memo, date: new Date().toISOString().split("T")[0], ...(quantity && unit ? { quantity, unit } : {}) };
+  function handleAddSubmit(itemName: string, categoryId: string, storeId: string) {
     const target = items.find((i) => i.name === itemName && i.categoryId === categoryId);
-    const newItems = target
-      ? items.map((i) => (i.id === target.id ? { ...i, prices: [...i.prices, entry] } : i))
-      : [...items, { id: uid(), categoryId, name: itemName, prices: [entry] }];
-    updateSharedData({ items: newItems });
-    addToMemoHistory(memo);
+    const finalItem = target ?? { id: uid(), categoryId, name: itemName, prices: [] };
+    if (!target) updateSharedData({ items: [...items, finalItem] });
+    setActiveCategory(categoryId);
+    setSelectedItemDefaultStore(storeId);
+    setSelectedItem(finalItem);
     setShowAddDialog(false);
   }
 
@@ -234,7 +234,7 @@ export default function Home() {
             key={cat.id}
             onClick={() => setActiveCategory(cat.id)}
             className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all w-full text-left ${
-              isActive ? colors.activeTab + " shadow-sm" : colors.tab + " hover:opacity-80"
+              isActive ? colors.activeTab + " shadow-sm" : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:opacity-80"
             }`}
           >
             <span>{cat.emoji}</span>
@@ -294,19 +294,6 @@ export default function Home() {
             </button>
             <button
               type="button"
-              onClick={() => {
-                navigator.clipboard.writeText(getRoomShareUrl(roomId));
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-              }}
-              className={`${ICON_BTN} ${copied ? "text-violet-500 dark:text-violet-400" : ""}`}
-              aria-label="共有リンクをコピー"
-              title={copied ? "コピー済！" : "共有リンクをコピー"}
-            >
-              <LinkIcon className="h-5 w-5" />
-            </button>
-            <button
-              type="button"
               onClick={() => setShowShoppingList(true)}
               className={`relative ${ICON_BTN}`}
               aria-label="買うものリスト"
@@ -324,7 +311,7 @@ export default function Home() {
                 setShowSearch((v) => !v);
                 setSearchQuery("");
               }}
-              className={`${ICON_BTN} ${showSearch ? "text-violet-500 dark:text-violet-400" : ""}`}
+              className={`hidden md:flex ${ICON_BTN} ${showSearch ? "text-violet-500 dark:text-violet-400" : ""}`}
               aria-label="検索"
             >
               <MagnifyingGlassIcon className="h-5 w-5" />
@@ -333,9 +320,9 @@ export default function Home() {
         </div>
       </header>
 
-      {/* ── Search bar ── */}
+      {/* ── Search bar (desktop only) ── */}
       {showSearch && (
-        <div className="bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 px-4 py-2">
+        <div className="hidden md:block bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 px-4 py-2">
           <div className="mx-auto max-w-5xl relative">
             <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
             <input
@@ -360,31 +347,61 @@ export default function Home() {
         </div>
       )}
 
-      {/* ── Category tabs (mobile only) ── */}
+      {/* ── Category tabs / Search (mobile only) ── */}
       <div className="md:hidden bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700 px-3 py-2">
-        <div className="flex flex-wrap gap-1.5 items-center">
-          {categories.map((cat) => {
-            const colors   = CATEGORY_COLORS[cat.colorIndex % CATEGORY_COLORS.length];
-            const isActive = activeCategory === cat.id;
-            return (
+        <div className="flex items-center gap-2">
+          {showSearch ? (
+            <div className="flex-1 relative">
+              <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="商品名を検索..."
+                autoFocus
+                className="w-full pl-8 pr-8 py-1.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600"
+              />
+              {searchQuery && (
+                <button type="button" onClick={() => setSearchQuery("")} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-300 hover:text-slate-500 dark:hover:text-slate-300">
+                  <XMarkIcon className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-1.5 items-center flex-1">
+              {categories.map((cat) => {
+                const colors   = CATEGORY_COLORS[cat.colorIndex % CATEGORY_COLORS.length];
+                const isActive = activeCategory === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => setActiveCategory(cat.id)}
+                    title={cat.name}
+                    className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-sm font-medium transition-all ${
+                      isActive ? colors.activeTab + " shadow-sm" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:opacity-80"
+                    }`}
+                  >
+                    <span>{cat.emoji}</span>
+                    {isActive && <span className="text-xs">{cat.name}</span>}
+                  </button>
+                );
+              })}
               <button
-                key={cat.id}
-                onClick={() => setActiveCategory(cat.id)}
-                title={cat.name}
-                className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-sm font-medium transition-all ${
-                  isActive ? colors.activeTab + " shadow-sm" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:opacity-80"
-                }`}
+                onClick={() => setShowCategoryManager(true)}
+                className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 text-base flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
               >
-                <span>{cat.emoji}</span>
-                {isActive && <span className="text-xs">{cat.name}</span>}
+                +
               </button>
-            );
-          })}
+            </div>
+          )}
           <button
-            onClick={() => setShowCategoryManager(true)}
-            className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 text-base flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+            type="button"
+            onClick={() => { setShowSearch((v) => !v); setSearchQuery(""); }}
+            className={`shrink-0 rounded-full p-1.5 transition-colors ${showSearch ? "text-violet-500 dark:text-violet-400 bg-violet-50 dark:bg-violet-900/20" : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"}`}
+            aria-label="検索"
           >
-            +
+            <MagnifyingGlassIcon className="h-5 w-5" />
           </button>
         </div>
       </div>
@@ -547,7 +564,9 @@ export default function Home() {
           categories={categories}
           activeColors={activeColors}
           memoHistory={memoHistory}
-          onClose={() => setSelectedItem(null)}
+          defaultStoreId={selectedItemDefaultStore || undefined}
+          initialShowForm={!!selectedItemDefaultStore}
+          onClose={() => { setSelectedItem(null); setSelectedItemDefaultStore(""); }}
           onAddPrice={(storeId, price, memo, quantity, unit) => handleAddPriceForItem(selectedItem.id, storeId, price, memo, quantity, unit)}
           onDeleteEntry={(entryId) => handleDeleteEntry(selectedItem.id, entryId)}
           onEditEntry={(entryId, updates) => handleEditEntry(selectedItem.id, entryId, updates)}
@@ -560,7 +579,6 @@ export default function Home() {
           categories={categories}
           stores={stores}
           defaultCategoryId={activeCategory}
-          memoHistory={memoHistory}
           onClose={() => setShowAddDialog(false)}
           onSubmit={handleAddSubmit}
         />
@@ -591,6 +609,7 @@ export default function Home() {
           onClose={() => setShowStoreManager(false)}
           onAdd={(name) => updateSharedData({ stores: [...stores, { id: uid(), name }] })}
           onDelete={handleDeleteStore}
+          onReorder={(reordered) => updateSharedData({ stores: reordered })}
         />
       )}
       {showSettings && (
@@ -742,7 +761,7 @@ function SortableItemCard({
 type EntryUpdates = { storeId: string; price: number; memo: string; quantity?: number; unit?: string };
 
 function PriceDetailSheet({
-  item, items, stores, categories, activeColors, memoHistory, onClose, onAddPrice, onDeleteEntry, onEditEntry, onDeleteItem, onChangeCategory,
+  item, items, stores, categories, activeColors, memoHistory, defaultStoreId, initialShowForm, onClose, onAddPrice, onDeleteEntry, onEditEntry, onDeleteItem, onChangeCategory,
 }: {
   item: Item;
   items: Item[];
@@ -750,6 +769,8 @@ function PriceDetailSheet({
   categories: Category[];
   activeColors: (typeof CATEGORY_COLORS)[number];
   memoHistory: string[];
+  defaultStoreId?: string;
+  initialShowForm?: boolean;
   onClose: () => void;
   onAddPrice: (storeId: string, price: number, memo: string, quantity?: number, unit?: string) => void;
   onDeleteEntry: (entryId: string) => void;
@@ -757,8 +778,8 @@ function PriceDetailSheet({
   onDeleteItem: () => void;
   onChangeCategory: (categoryId: string) => void;
 }) {
-  const [showForm,  setShowForm]  = useState(false);
-  const [storeId,   setStoreId]   = useState(stores[0]?.id ?? "");
+  const [showForm,  setShowForm]  = useState(initialShowForm ?? false);
+  const [storeId,   setStoreId]   = useState(defaultStoreId ?? (stores[0]?.id ?? ""));
   const [price,     setPrice]     = useState("");
   const [memo,      setMemo]      = useState("");
   const [quantity,  setQuantity]  = useState("");
@@ -858,34 +879,14 @@ function PriceDetailSheet({
         </div>
 
         {/* ショッピングリンク */}
-        <div className="flex items-center gap-2 px-5 pb-3">
+        <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-100 dark:border-slate-700">
           {[
-            {
-              label: "Amazon",
-              url: `https://www.amazon.co.jp/s?k=${encodeURIComponent(currentItem.name)}`,
-              bg: "bg-[#FF9900]",
-              text: "text-white",
-            },
-            {
-              label: "Yahoo!",
-              url: `https://shopping.yahoo.co.jp/search?p=${encodeURIComponent(currentItem.name)}`,
-              bg: "bg-[#FF0033]",
-              text: "text-white",
-            },
-            {
-              label: "楽天",
-              url: `https://search.rakuten.co.jp/search/mall/${encodeURIComponent(currentItem.name)}/`,
-              bg: "bg-[#BF0000]",
-              text: "text-white",
-            },
+            { label: "Amazon", url: `https://www.amazon.co.jp/s?k=${encodeURIComponent(currentItem.name)}`, bg: "bg-[#FF9900]", text: "text-white" },
+            { label: "Yahoo!", url: `https://shopping.yahoo.co.jp/search?p=${encodeURIComponent(currentItem.name)}`, bg: "bg-[#FF0033]", text: "text-white" },
+            { label: "楽天", url: `https://search.rakuten.co.jp/search/mall/${encodeURIComponent(currentItem.name)}/`, bg: "bg-[#BF0000]", text: "text-white" },
           ].map(({ label, url, bg, text }) => (
-            <a
-              key={label}
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${bg} ${text} hover:opacity-85 transition-opacity`}
-            >
+            <a key={label} href={url} target="_blank" rel="noopener noreferrer"
+              className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-semibold ${bg} ${text} hover:opacity-85 transition-opacity`}>
               {label}
               <svg className="h-3 w-3 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
@@ -1134,22 +1135,17 @@ function PriceDetailSheet({
 
 // ===================== AddDialog =====================
 function AddDialog({
-  categories, stores, defaultCategoryId, memoHistory, onClose, onSubmit,
+  categories, stores, defaultCategoryId, onClose, onSubmit,
 }: {
   categories: Category[];
   stores: Store[];
   defaultCategoryId: string;
-  memoHistory: string[];
   onClose: () => void;
-  onSubmit: (itemName: string, categoryId: string, storeId: string, price: number, memo: string, quantity?: number, unit?: string) => void;
+  onSubmit: (itemName: string, categoryId: string, storeId: string) => void;
 }) {
   const [categoryId,  setCategoryId]  = useState(defaultCategoryId);
   const [itemName,    setItemName]    = useState("");
   const [storeId,     setStoreId]     = useState(stores[0]?.id ?? "");
-  const [price,       setPrice]       = useState("");
-  const [memo,        setMemo]        = useState("");
-  const [quantity,    setQuantity]    = useState("");
-  const [unit,        setUnit]        = useState("");
   const [formError,   setFormError]   = useState("");
   const itemNameRef = useRef<HTMLInputElement>(null);
 
@@ -1161,11 +1157,8 @@ function AddDialog({
     e.preventDefault();
     if (!itemName.trim()) { setFormError("商品名を入力してください。"); return; }
     if (!storeId)         { setFormError("店舗を選択してください。"); return; }
-    const p = parseInt(price);
-    if (!p || p <= 0)     { setFormError("金額を入力してください。"); return; }
     setFormError("");
-    const qty = quantity ? parseFloat(quantity) : undefined;
-    onSubmit(itemName.trim(), categoryId, storeId, p, memo, qty, unit || undefined);
+    onSubmit(itemName.trim(), categoryId, storeId);
   }
 
   return (
@@ -1176,7 +1169,7 @@ function AddDialog({
           <div className="w-10 h-1 bg-slate-200 dark:bg-slate-600 rounded-full" />
         </div>
         <div className="flex items-center justify-between px-5 py-4">
-          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">価格を記録</h2>
+          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">アイテムを追加</h2>
           <button onClick={onClose} className="text-slate-300 dark:text-slate-500 hover:text-slate-500 dark:hover:text-slate-300 text-xl p-1">✕</button>
         </div>
         <form onSubmit={handleSubmit} className="px-5 pb-8 space-y-4 overflow-y-auto max-h-[75vh]">
@@ -1202,7 +1195,7 @@ function AddDialog({
             <input ref={itemNameRef} type="text" value={itemName} onChange={(e) => setItemName(e.target.value)} placeholder="例: 牛乳"
               className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
           </div>
-          <div>
+          <div className="pb-2">
             <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">
               店舗 *
             </label>
@@ -1210,54 +1203,6 @@ function AddDialog({
               className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200">
               {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-              金額（円） *
-            </label>
-            <input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="例: 198" min="0"
-              className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
-            <div className="flex gap-1.5 mt-1.5 flex-wrap">
-              {[5, 10, 15, 20].map((pct) => (
-                <button key={pct} type="button"
-                  onClick={() => { const p = parseInt(price); if (p > 0) setPrice(String(Math.round(p * (1 - pct / 100)))); }}
-                  className="px-2.5 py-1 rounded-full text-xs font-medium bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border border-orange-200 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors">
-                  -{pct}%
-                </button>
-              ))}
-            </div>
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">数量・単位（任意）</label>
-            <div className="flex flex-wrap items-center gap-2 mt-1">
-              <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="例: 500" min="0" step="any"
-                className="w-24 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
-              <div className="flex flex-wrap gap-1.5">
-                {["個", "枚", "本", "袋", "g", "kg", "ml", "L"].map((u) => (
-                  <button key={u} type="button" onClick={() => setUnit(unit === u ? "" : u)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all ${unit === u ? "bg-violet-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600"}`}>
-                    {u}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {quantity && unit && (() => {
-              const p = parseInt(price);
-              const q = parseFloat(quantity);
-              if (!p || !q) return null;
-              const up = calcUnitPrice(p, q, unit);
-              return up ? (
-                <p className="text-xs text-violet-500 dark:text-violet-400 mt-1">→ 単価 ¥{up.value}/{up.per}</p>
-              ) : null;
-            })()}
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">メモ（任意）</label>
-            <input type="text" value={memo} onChange={(e) => setMemo(e.target.value)} placeholder="例: 特売品" list="memo-history-dialog"
-              className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
-            <datalist id="memo-history-dialog">
-              {memoHistory.map((h) => <option key={h} value={h} />)}
-            </datalist>
           </div>
           {formError && (
             <p className="text-xs text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-3 py-2">
@@ -1465,6 +1410,7 @@ function SettingsDialog({
   onPassphraseSave: (pass: string) => void;
 }) {
   const [passInput,    setPassInput]    = useState(passphrase);
+  const [copied,       setCopied]       = useState(false);
   const [isIOS,        setIsIOS]        = useState(false);
   const [isInstalled,  setIsInstalled]  = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<Event & { prompt: () => void; userChoice: Promise<{ outcome: string }> } | null>(null);
@@ -1532,7 +1478,22 @@ function SettingsDialog({
 
           {/* グループ設定 */}
           <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3">
-            <span className="text-sm font-bold text-slate-800 dark:text-white">グループ設定</span>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-bold text-slate-800 dark:text-white">グループ設定</span>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(getRoomShareUrl(roomId));
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 2000);
+                }}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded-lg text-xs transition-colors ${copied ? "text-violet-500 dark:text-violet-400" : "text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"}`}
+                title="共有リンクをコピー"
+              >
+                <LinkIcon className="h-4 w-4" />
+                {copied && <span>コピー済！</span>}
+              </button>
+            </div>
             <div className="space-y-1">
               <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">ルームID</p>
               <span className="block font-mono text-sm font-bold text-slate-700 dark:text-slate-200 bg-slate-50 dark:bg-slate-700/50 rounded-xl px-3 py-2">{roomId}</span>
@@ -1599,22 +1560,51 @@ function SettingsDialog({
 }
 
 // ===================== StoreManagerDialog =====================
+function SortableStoreRow({ store, onDelete }: { store: Store; onDelete: () => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: store.id });
+  const style = { transform: CSS.Transform.toString(transform), transition };
+  return (
+    <div ref={setNodeRef} style={style} className={`flex items-center justify-between bg-slate-50 dark:bg-slate-700/50 rounded-xl px-3 py-2.5 ${isDragging ? "opacity-50 shadow-lg" : ""}`}>
+      <div className="flex items-center gap-2">
+        <button {...attributes} {...listeners} className="text-slate-300 dark:text-slate-600 hover:text-slate-400 cursor-grab active:cursor-grabbing touch-none p-0.5">
+          <Bars3Icon className="h-4 w-4" />
+        </button>
+        <span className="text-sm text-slate-700 dark:text-slate-200">{store.name}</span>
+      </div>
+      <button onClick={onDelete} className="text-slate-300 dark:text-slate-500 hover:text-red-400 transition-colors p-1">✕</button>
+    </div>
+  );
+}
+
 function StoreManagerDialog({
-  stores, onClose, onAdd, onDelete,
+  stores, onClose, onAdd, onDelete, onReorder,
 }: {
   stores: Store[];
   onClose: () => void;
   onAdd: (name: string) => void;
   onDelete: (id: string) => void;
+  onReorder: (stores: Store[]) => void;
 }) {
   const [newName, setNewName] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
+  );
 
   function handleAdd(e: React.SyntheticEvent) {
     e.preventDefault();
     if (!newName.trim()) return;
     onAdd(newName.trim());
     setNewName("");
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = stores.findIndex((s) => s.id === active.id);
+    const newIndex = stores.findIndex((s) => s.id === over.id);
+    onReorder(arrayMove(stores, oldIndex, newIndex));
   }
 
   const confirmStore = stores.find((s) => s.id === confirmDeleteId);
@@ -1631,17 +1621,13 @@ function StoreManagerDialog({
           {stores.length === 0 ? (
             <p className="text-sm text-slate-400 dark:text-slate-500 text-center py-4">店舗がありません</p>
           ) : (
-            stores.map((store) => (
-              <div key={store.id} className="flex items-center justify-between bg-slate-50 dark:bg-slate-700/50 rounded-xl px-4 py-2.5">
-                <span className="text-sm text-slate-700 dark:text-slate-200">{store.name}</span>
-                <button
-                  onClick={() => setConfirmDeleteId(store.id)}
-                  className="text-slate-300 dark:text-slate-500 hover:text-red-400 transition-colors p-1"
-                >
-                  ✕
-                </button>
-              </div>
-            ))
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={stores.map((s) => s.id)} strategy={rectSortingStrategy}>
+                {stores.map((store) => (
+                  <SortableStoreRow key={store.id} store={store} onDelete={() => setConfirmDeleteId(store.id)} />
+                ))}
+              </SortableContext>
+            </DndContext>
           )}
         </div>
         <form onSubmit={handleAdd} className="flex gap-2">
