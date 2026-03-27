@@ -704,7 +704,6 @@ function SortableItemCard({
   };
 
   const minPrice = item.prices.length > 0 ? Math.min(...item.prices.map((p) => p.price)) : null;
-  const maxPrice = item.prices.length > 0 ? Math.max(...item.prices.map((p) => p.price)) : null;
 
   // 単価が最良（最小）の店舗を表示。単価情報がない場合は最安値の店舗
   const bestEntry = (() => {
@@ -748,7 +747,7 @@ function SortableItemCard({
           <span className="font-semibold text-slate-700 dark:text-slate-200 text-sm truncate flex-1">{item.name}</span>
           {minPrice !== null ? (
             <span className={`text-sm font-bold flex-shrink-0 ${activeColors.price}`}>
-              ¥{minPrice.toLocaleString()}{maxPrice !== minPrice ? `〜¥${maxPrice!.toLocaleString()}` : ""}
+              ¥{minPrice.toLocaleString()}
             </span>
           ) : (
             <span className="text-xs text-slate-300 dark:text-slate-600 flex-shrink-0">未登録</span>
@@ -1106,6 +1105,11 @@ function PriceDetailSheet({
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-slate-700 dark:text-slate-200">{store?.name ?? "不明"}</span>
+                        {entry.quantity && entry.unit && (
+                          <span className="px-1.5 py-0.5 rounded-full text-xs font-medium bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400">
+                            {entry.quantity}{entry.unit}
+                          </span>
+                        )}
                         {entry.discountPct && (
                           <span className="px-1.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400">
                             -{entry.discountPct}%
