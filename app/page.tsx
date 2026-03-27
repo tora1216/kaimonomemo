@@ -176,8 +176,6 @@ export default function Home() {
     const finalItem = target ?? { id: uid(), categoryId, name: itemName, prices: [] };
     if (!target) updateSharedData({ items: [...items, finalItem] });
     setActiveCategory(categoryId);
-    setSelectedItemDefaultStore(stores[0]?.id ?? "");
-    setSelectedItem(finalItem);
     setShowAddDialog(false);
   }
 
@@ -843,6 +841,7 @@ function PriceDetailSheet({
   const [editItemName,       setEditItemName]       = useState("");
   const [editItemCategoryId, setEditItemCategoryId] = useState("");
   const [confirmSave,        setConfirmSave]        = useState(false);
+  const [confirmDiscard,     setConfirmDiscard]     = useState(false);
   const [sortOrder,          setSortOrder]          = useState<"price" | "date" | "store">("price");
 
   useEffect(() => {
@@ -878,9 +877,11 @@ function PriceDetailSheet({
     return currentItem.prices.reduce((a, b) => a.price <= b.price ? a : b).id;
   }, [currentItem.prices]);
 
-  // 閉じる前にカテゴリ変更が保留中なら確認ダイアログを出す
+  // 閉じる前に未保存の編集があれば確認ダイアログを出す
   function handleClose() {
-    if (pendingCategoryId !== null && pendingCategoryId !== currentItem.categoryId) {
+    if (editingItem && (editItemName !== currentItem.name || editItemCategoryId !== currentItem.categoryId)) {
+      setConfirmDiscard(true);
+    } else if (pendingCategoryId !== null && pendingCategoryId !== currentItem.categoryId) {
       setConfirmCatChange(true);
     } else {
       onClose();
@@ -933,7 +934,7 @@ function PriceDetailSheet({
             <input type="text" value={editItemName} onChange={(e) => setEditItemName(e.target.value)} autoFocus
               className="flex-1 text-lg font-bold bg-transparent border-b-2 border-violet-400 dark:border-violet-500 focus:outline-none text-slate-800 dark:text-slate-100 min-w-0" />
           ) : (
-            <div className="flex items-center gap-2 min-w-0 flex-1">
+            <div className="flex items-center gap-3 min-w-0 flex-1">
               <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 truncate">{currentItem.name}</h2>
               {(() => {
                 const cat = categories.find((c) => c.id === currentItem.categoryId);
@@ -988,7 +989,7 @@ function PriceDetailSheet({
         )}
         {!editingItem && !showForm && !editingId && (
           <>
-            {/* ショッピングリンク */}
+            {/* ショッピングリンク + ソート */}
             <div className="flex items-center gap-2 px-5 py-3">
               {[
                 { label: "Amazon", url: `https://www.amazon.co.jp/s?k=${encodeURIComponent(currentItem.name)}`, bg: "bg-[#FF9900]", text: "text-white" },
@@ -1003,24 +1004,19 @@ function PriceDetailSheet({
                   </svg>
                 </a>
               ))}
+              {sortedPrices.length > 1 && (
+                <select value={sortOrder} onChange={(e) => setSortOrder(e.target.value as "price" | "date" | "store")}
+                  className="ml-auto text-xs border border-slate-200 dark:border-slate-600 rounded-lg px-2 py-1 bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-400 focus:outline-none">
+                  <option value="price">価格順</option>
+                  <option value="date">日付順</option>
+                  <option value="store">店舗順</option>
+                </select>
+              )}
             </div>
           </>
         )}
 
         <div className="overflow-y-auto flex-1 px-5">
-          {!showForm && sortedPrices.length > 1 && !editingId && (
-            <div className="flex gap-1 pt-2 pb-1">
-              {(["price", "date", "store"] as const).map((order) => {
-                const label = order === "price" ? "価格順" : order === "date" ? "日付順" : "店舗順";
-                return (
-                  <button key={order} onClick={() => setSortOrder(order)}
-                    className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${sortOrder === order ? "bg-slate-700 dark:bg-slate-200 text-white dark:text-slate-800" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600"}`}>
-                    {label}
-                  </button>
-                );
-              })}
-            </div>
-          )}
           {!showForm && sortedPrices.length === 0 ? (
             <div className="text-center py-8 text-slate-400 dark:text-slate-500 text-sm">価格情報がありません</div>
           ) : !showForm ? (
@@ -1253,6 +1249,25 @@ function PriceDetailSheet({
             </div>
           );
         })()}
+
+        {/* 編集破棄確認オーバーレイ */}
+        {confirmDiscard && (
+          <div className="absolute inset-0 bg-white dark:bg-slate-800 rounded-t-3xl md:rounded-3xl flex flex-col items-center justify-center p-6 gap-4 z-10">
+            <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 text-center">
+              変更を保存せずに閉じますか？
+            </p>
+            <div className="flex gap-3 w-full max-w-xs">
+              <button onClick={() => setConfirmDiscard(false)}
+                className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                キャンセル
+              </button>
+              <button onClick={() => { setConfirmDiscard(false); setEditingItem(false); onClose(); }}
+                className="flex-1 py-2.5 rounded-xl bg-slate-700 dark:bg-slate-200 text-white dark:text-slate-800 text-sm font-semibold hover:opacity-90 transition-opacity">
+                閉じる
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* アイテム削除確認オーバーレイ */}
         {confirmDelete && (
