@@ -216,6 +216,10 @@ export default function Home() {
     updateSharedData({ items: items.map((i) => i.id === itemId ? { ...i, categoryId: newCategoryId } : i) });
   }
 
+  function handleRenameItem(itemId: string, newName: string, newCategoryId: string) {
+    updateSharedData({ items: items.map((i) => i.id === itemId ? { ...i, name: newName, categoryId: newCategoryId } : i) });
+  }
+
   function handleDeleteStore(storeId: string) {
     const newStores = stores.filter((s) => s.id !== storeId);
     const newItems = items
@@ -571,11 +575,11 @@ export default function Home() {
           onEditEntry={(entryId, updates) => handleEditEntry(selectedItem.id, entryId, updates)}
           onDeleteItem={() => handleDeleteItem(selectedItem.id)}
           onChangeCategory={(catId) => handleChangeItemCategory(selectedItem.id, catId)}
+          onRenameItem={(name, catId) => handleRenameItem(selectedItem.id, name, catId)}
         />
       )}
       {showAddDialog && (
         <AddDialog
-          categories={categories}
           defaultCategoryId={activeCategory}
           onClose={() => setShowAddDialog(false)}
           onSubmit={handleAddSubmit}
@@ -703,14 +707,36 @@ function SortableItemCard({
 
   const minPrice = item.prices.length > 0 ? Math.min(...item.prices.map((p) => p.price)) : null;
   const maxPrice = item.prices.length > 0 ? Math.max(...item.prices.map((p) => p.price)) : null;
-  const minEntry = minPrice !== null ? item.prices.find((p) => p.price === minPrice) : null;
-  const minStore = minEntry ? stores.find((s) => s.id === minEntry.storeId) : null;
+
+  // 単価が最良（最小）の店舗を表示。単価情報がない場合は最安値の店舗
+  const bestEntry = (() => {
+    if (item.prices.length === 0) return null;
+    const withUnit = item.prices.filter((p) => p.quantity && p.unit);
+    if (withUnit.length > 0) {
+      let best = withUnit[0];
+      let bestVal = Infinity;
+      for (const p of withUnit) {
+        const up = calcUnitPrice(p.price, p.quantity!, p.unit!);
+        if (up) {
+          const v = parseFloat(up.value);
+          if (v < bestVal) { bestVal = v; best = p; }
+        }
+      }
+      return best;
+    }
+    const mp = Math.min(...item.prices.map((p) => p.price));
+    return item.prices.find((p) => p.price === mp) ?? null;
+  })();
+  const minStore = bestEntry ? stores.find((s) => s.id === bestEntry.storeId) : null;
+  const bestUnitPrice = bestEntry?.quantity && bestEntry?.unit
+    ? calcUnitPrice(bestEntry.price, bestEntry.quantity, bestEntry.unit)
+    : null;
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`relative bg-white dark:bg-slate-800 rounded-2xl shadow-sm border-l-4 ${activeColors.accent} ${
+      className={`relative bg-white dark:bg-slate-800 rounded-2xl shadow-sm ${
         isDragging ? "opacity-50 shadow-lg scale-105" : "hover:shadow-md dark:hover:shadow-slate-900/50"
       } transition-all`}
     >
@@ -719,7 +745,8 @@ function SortableItemCard({
         disabled={editMode}
         className={`w-full text-left px-3 py-2 ${editMode ? "pr-12" : "pr-3"} active:scale-95 transition-transform disabled:active:scale-100`}
       >
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className={`w-2 h-2 rounded-full flex-shrink-0 ${activeColors.dot}`} />
           <span className="font-semibold text-slate-700 dark:text-slate-200 text-sm truncate flex-1">{item.name}</span>
           {minPrice !== null ? (
             <span className={`text-sm font-bold flex-shrink-0 ${activeColors.price}`}>
@@ -729,12 +756,14 @@ function SortableItemCard({
             <span className="text-xs text-slate-300 dark:text-slate-600 flex-shrink-0">未登録</span>
           )}
         </div>
-        <div className="flex items-center justify-between mt-0.5">
-          <span className="text-xs text-slate-300 dark:text-slate-600">
-            {item.prices.length > 0 ? `${item.prices.length}件 →` : "価格を追加"}
+        <div className="flex items-center justify-between mt-0.5 pl-4">
+          <span className="text-xs text-slate-400 dark:text-slate-500 truncate">
+            {minStore
+              ? <>{minStore.name}{item.prices.length > 1 && <span className="ml-1 text-slate-300 dark:text-slate-600">+{item.prices.length - 1}</span>}</>
+              : item.prices.length === 0 ? "価格を追加" : ""}
           </span>
-          {minStore && (
-            <span className="text-xs text-slate-400 dark:text-slate-500">{minStore.name}</span>
+          {bestUnitPrice && (
+            <span className="text-xs text-slate-400 dark:text-slate-500 flex-shrink-0">¥{bestUnitPrice.value}/{bestUnitPrice.per}</span>
           )}
         </div>
       </button>
@@ -763,7 +792,7 @@ function applyModifiers(base: string, discount: number | null, tax: number | nul
 }
 
 function PriceDetailSheet({
-  item, items, stores, categories, memoHistory, defaultStoreId, initialShowForm, onClose, onAddPrice, onDeleteEntry, onEditEntry, onDeleteItem, onChangeCategory,
+  item, items, stores, categories, memoHistory, defaultStoreId, initialShowForm, onClose, onAddPrice, onDeleteEntry, onEditEntry, onDeleteItem, onChangeCategory, onRenameItem,
 }: {
   item: Item;
   items: Item[];
@@ -778,6 +807,7 @@ function PriceDetailSheet({
   onEditEntry: (entryId: string, updates: EntryUpdates) => void;
   onDeleteItem: () => void;
   onChangeCategory: (categoryId: string) => void;
+  onRenameItem: (name: string, categoryId: string) => void;
 }) {
   const [showForm,     setShowForm]     = useState(initialShowForm ?? false);
   const [storeId,      setStoreId]      = useState(defaultStoreId ?? (stores[0]?.id ?? ""));
@@ -808,8 +838,45 @@ function PriceDetailSheet({
   const [pendingCategoryId, setPendingCategoryId] = useState<string | null>(null);
   const [confirmCatChange,  setConfirmCatChange]  = useState(false);
 
-  const currentItem  = items.find((i) => i.id === item.id) ?? item;
-  const sortedPrices = [...currentItem.prices].sort((a, b) => a.price - b.price);
+  // アイテム名・カテゴリ編集
+  const [editingItem,        setEditingItem]        = useState(false);
+  const [editItemName,       setEditItemName]       = useState("");
+  const [editItemCategoryId, setEditItemCategoryId] = useState("");
+  const [confirmSave,        setConfirmSave]        = useState(false);
+  const [sortOrder,          setSortOrder]          = useState<"price" | "date" | "store">("price");
+
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
+
+  const currentItem = items.find((i) => i.id === item.id) ?? item;
+
+  const sortedPrices = useMemo(() => {
+    const prices = [...currentItem.prices];
+    if (sortOrder === "price") return prices.sort((a, b) => a.price - b.price);
+    if (sortOrder === "date")  return prices.sort((a, b) => b.date.localeCompare(a.date));
+    return prices.sort((a, b) => {
+      const sa = stores.find((s) => s.id === a.storeId)?.name ?? "";
+      const sb = stores.find((s) => s.id === b.storeId)?.name ?? "";
+      return sa.localeCompare(sb, "ja");
+    });
+  }, [currentItem.prices, sortOrder, stores]);
+
+  // 単価ベースで最良エントリを判定（単価なければ最安値）
+  const bestEntryId = useMemo(() => {
+    if (currentItem.prices.length === 0) return null;
+    const withUnit = currentItem.prices.filter((p) => p.quantity && p.unit);
+    if (withUnit.length > 0) {
+      let best = withUnit[0], bestVal = Infinity;
+      for (const p of withUnit) {
+        const up = calcUnitPrice(p.price, p.quantity!, p.unit!);
+        if (up) { const v = parseFloat(up.value); if (v < bestVal) { bestVal = v; best = p; } }
+      }
+      return best.id;
+    }
+    return currentItem.prices.reduce((a, b) => a.price <= b.price ? a : b).id;
+  }, [currentItem.prices]);
 
   // 閉じる前にカテゴリ変更が保留中なら確認ダイアログを出す
   function handleClose() {
@@ -861,41 +928,68 @@ function PriceDetailSheet({
         <div className="flex justify-center pt-3 pb-1 md:hidden">
           <div className="w-10 h-1 bg-slate-200 dark:bg-slate-600 rounded-full" />
         </div>
-        <div className="flex items-center justify-between px-5 py-4">
-          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">{currentItem.name}</h2>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setConfirmDelete(true)} className="flex items-center gap-1.5 rounded-full border border-red-200 dark:border-red-800 px-3 py-2 text-sm text-red-500 transition hover:bg-red-50 dark:hover:bg-red-900/20">
-              <TrashIcon className="h-4 w-4" />
-              削除
+        <div className="flex items-center justify-between px-5 pt-3 pb-2 gap-2">
+          {editingItem ? (
+            <input type="text" value={editItemName} onChange={(e) => setEditItemName(e.target.value)} autoFocus
+              className="flex-1 text-lg font-bold bg-transparent border-b-2 border-violet-400 dark:border-violet-500 focus:outline-none text-slate-800 dark:text-slate-100 min-w-0" />
+          ) : (
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100 truncate">{currentItem.name}</h2>
+              {(() => {
+                const cat = categories.find((c) => c.id === currentItem.categoryId);
+                if (!cat) return null;
+                const colors = CATEGORY_COLORS[cat.colorIndex % CATEGORY_COLORS.length];
+                return (
+                  <span className={`flex-shrink-0 flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${colors.activeTab}`}>
+                    {cat.emoji} {cat.name}
+                  </span>
+                );
+              })()}
+            </div>
+          )}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <button onClick={() => { if (!editingItem) { setEditItemName(currentItem.name); setEditItemCategoryId(currentItem.categoryId); } setEditingItem((v) => !v); }}
+              className={`p-1.5 transition-colors ${editingItem ? "text-violet-500 dark:text-violet-400" : "text-slate-300 dark:text-slate-600 hover:text-violet-400 dark:hover:text-violet-400"}`}>
+              <PencilIcon className="h-4 w-4" />
             </button>
-            <button onClick={handleClose} className="text-slate-300 dark:text-slate-500 hover:text-slate-500 dark:hover:text-slate-300 text-xl p-1">✕</button>
+            <button onClick={() => setConfirmDelete(true)}
+              className="p-1.5 text-slate-300 dark:text-slate-600 hover:text-red-400 dark:hover:text-red-400 transition-colors">
+              <TrashIcon className="h-4 w-4" />
+            </button>
+            <button onClick={handleClose} className="p-1.5 text-slate-300 dark:text-slate-500 hover:text-slate-500 dark:hover:text-slate-300 text-xl leading-none">✕</button>
           </div>
         </div>
-        {!showForm && (
-          <>
-            {/* カテゴリ変更 */}
-            <div className="px-5 pb-3 border-b border-slate-100 dark:border-slate-700">
-              <p className="text-xs text-slate-400 dark:text-slate-500 font-medium mb-2">カテゴリ</p>
-              <div className="flex flex-wrap gap-1.5">
-                {categories.map((cat) => {
-                  const colors = CATEGORY_COLORS[cat.colorIndex % CATEGORY_COLORS.length];
-                  const effectiveCatId = pendingCategoryId ?? currentItem.categoryId;
-                  const isActive = effectiveCatId === cat.id;
-                  return (
-                    <button key={cat.id} type="button"
-                      onClick={() => !isActive && setPendingCategoryId(cat.id)}
-                      title={cat.name}
-                      className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-all ${isActive ? colors.activeTab + " shadow-sm" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:opacity-80"}`}>
-                      <span>{cat.emoji}</span>
-                      {isActive && <span>{cat.name}</span>}
-                    </button>
-                  );
-                })}
-              </div>
+        {editingItem && (
+          <div className="px-5 pb-4 space-y-3">
+            <div className="flex flex-wrap gap-1.5">
+              {categories.map((cat) => {
+                const colors = CATEGORY_COLORS[cat.colorIndex % CATEGORY_COLORS.length];
+                const isActive = editItemCategoryId === cat.id;
+                return (
+                  <button key={cat.id} type="button" onClick={() => setEditItemCategoryId(cat.id)}
+                    className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-all ${isActive ? colors.activeTab + " shadow-sm" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:opacity-80"}`}>
+                    <span>{cat.emoji}</span>
+                    <span>{cat.name}</span>
+                  </button>
+                );
+              })}
             </div>
-
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setEditingItem(false)}
+                className="flex-1 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                キャンセル
+              </button>
+              <button type="button" onClick={() => { if (!editItemName.trim()) return; if (editItemCategoryId !== currentItem.categoryId) { setConfirmSave(true); } else { onRenameItem(editItemName.trim(), editItemCategoryId); setEditingItem(false); } }}
+                className="flex-1 py-2 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white text-sm font-semibold">
+                保存
+              </button>
+            </div>
+          </div>
+        )}
+        {!editingItem && !showForm && !editingId && (
+          <>
             {/* ショッピングリンク */}
-            <div className="flex items-center gap-2 px-5 py-3 border-b border-slate-100 dark:border-slate-700">
+            <div className="flex items-center gap-2 px-5 py-3">
               {[
                 { label: "Amazon", url: `https://www.amazon.co.jp/s?k=${encodeURIComponent(currentItem.name)}`, bg: "bg-[#FF9900]", text: "text-white" },
                 { label: "Yahoo!", url: `https://shopping.yahoo.co.jp/search?p=${encodeURIComponent(currentItem.name)}`, bg: "bg-[#FF0033]", text: "text-white" },
@@ -914,14 +1008,29 @@ function PriceDetailSheet({
         )}
 
         <div className="overflow-y-auto flex-1 px-5">
+          {!showForm && sortedPrices.length > 1 && !editingId && (
+            <div className="flex gap-1 pt-2 pb-1">
+              {(["price", "date", "store"] as const).map((order) => {
+                const label = order === "price" ? "価格順" : order === "date" ? "日付順" : "店舗順";
+                return (
+                  <button key={order} onClick={() => setSortOrder(order)}
+                    className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${sortOrder === order ? "bg-slate-700 dark:bg-slate-200 text-white dark:text-slate-800" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600"}`}>
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {!showForm && sortedPrices.length === 0 ? (
             <div className="text-center py-8 text-slate-400 dark:text-slate-500 text-sm">価格情報がありません</div>
           ) : !showForm ? (
             <div className="space-y-2 pb-2">
-              {sortedPrices.map((entry, i) => {
-                const store      = stores.find((s) => s.id === entry.storeId);
-                const isCheapest = i === 0;
-                const isEditing  = editingId === entry.id;
+              {sortedPrices.map((entry) => {
+                const store    = stores.find((s) => s.id === entry.storeId);
+                const isBest   = entry.id === bestEntryId;
+                const isEditing = editingId === entry.id;
+
+                if (editingId && !isEditing) return null;
 
                 if (isEditing) {
                   const previewUp = editQty && editUnit
@@ -938,7 +1047,7 @@ function PriceDetailSheet({
                         <input type="number" value={editPrice} onChange={(e) => { setEditBasePrice(e.target.value); setEditDiscountPct(null); setEditTaxPct(null); }} placeholder="金額（円）" min="0"
                           className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
                         <div className="flex gap-1.5 mt-1.5 flex-wrap">
-                          {[5, 10, 15, 20].map((pct) => (
+                          {[5, 10, 15].map((pct) => (
                             <button key={pct} type="button"
                               onClick={() => setEditDiscountPct(editDiscountPct === pct ? null : pct)}
                               className={`px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors ${editDiscountPct === pct ? "bg-orange-500 text-white border-orange-500" : "bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-900/30"}`}>
@@ -993,7 +1102,7 @@ function PriceDetailSheet({
                   <div
                     key={entry.id}
                     className={`flex items-center justify-between p-3 rounded-xl ${
-                      isCheapest
+                      isBest
                         ? "bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600"
                         : "bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700"
                     }`}
@@ -1012,7 +1121,7 @@ function PriceDetailSheet({
                     </div>
                     <div className="flex items-center gap-1">
                       <div className="text-right mr-1">
-                        <div className={`text-lg font-bold ${isCheapest ? "text-amber-400 dark:text-amber-300" : "text-slate-500 dark:text-slate-400"}`}>
+                        <div className={`text-lg font-bold ${isBest ? "text-amber-400 dark:text-amber-300" : "text-slate-500 dark:text-slate-400"}`}>
                           ¥{entry.price.toLocaleString()}
                         </div>
                         {entry.quantity && entry.unit && (() => {
@@ -1049,7 +1158,7 @@ function PriceDetailSheet({
                 <input type="number" value={price} onChange={(e) => { setBasePrice(e.target.value); setDiscountPct(null); setTaxPct(null); }} placeholder="例: 198" min="0" required
                   className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
                 <div className="flex gap-1.5 mt-1.5 flex-wrap">
-                  {[5, 10, 15, 20].map((pct) => (
+                  {[5, 10, 15].map((pct) => (
                     <button key={pct} type="button"
                       onClick={() => setDiscountPct(discountPct === pct ? null : pct)}
                       className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${discountPct === pct ? "bg-orange-500 text-white border-orange-500" : "bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 border-orange-200 dark:border-orange-800 hover:bg-orange-100 dark:hover:bg-orange-900/30"}`}>
@@ -1121,6 +1230,30 @@ function PriceDetailSheet({
           </div>
         )}
 
+        {confirmSave && (() => {
+          const catChanged  = editItemCategoryId !== currentItem.categoryId;
+          const newCat      = categories.find((c) => c.id === editItemCategoryId);
+          return (
+            <div className="absolute inset-0 bg-white dark:bg-slate-800 rounded-t-3xl md:rounded-3xl flex flex-col items-center justify-center p-6 gap-4 z-10">
+              {catChanged && newCat && (
+                <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 text-center">
+                  カテゴリを「{newCat.emoji} {newCat.name}」に変更しますか？
+                </p>
+              )}
+              <div className="flex gap-3 w-full max-w-xs">
+                <button onClick={() => setConfirmSave(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                  キャンセル
+                </button>
+                <button onClick={() => { onRenameItem(editItemName.trim(), editItemCategoryId); setConfirmSave(false); setEditingItem(false); }}
+                  className="flex-1 py-2.5 rounded-xl bg-violet-500 text-white text-sm font-semibold hover:bg-violet-600 transition-colors">
+                  変更する
+                </button>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* アイテム削除確認オーバーレイ */}
         {confirmDelete && (
           <div className="absolute inset-0 bg-white dark:bg-slate-800 rounded-t-3xl md:rounded-3xl flex flex-col items-center justify-center p-6 gap-4 z-10">
@@ -1172,67 +1305,53 @@ function PriceDetailSheet({
 
 // ===================== AddDialog =====================
 function AddDialog({
-  categories, defaultCategoryId, onClose, onSubmit,
+  defaultCategoryId, onClose, onSubmit,
 }: {
-  categories: Category[];
   defaultCategoryId: string;
   onClose: () => void;
   onSubmit: (itemName: string, categoryId: string) => void;
 }) {
-  const [categoryId,  setCategoryId]  = useState(defaultCategoryId);
-  const [itemName,    setItemName]    = useState("");
-  const [formError,   setFormError]   = useState("");
+  const [itemName,  setItemName]  = useState("");
+  const [formError, setFormError] = useState("");
+
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = ""; };
+  }, []);
 
   function handleSubmit(e: React.SyntheticEvent) {
     e.preventDefault();
     if (!itemName.trim()) { setFormError("商品名を入力してください。"); return; }
     setFormError("");
-    onSubmit(itemName.trim(), categoryId);
+    onSubmit(itemName.trim(), defaultCategoryId);
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex flex-col justify-end md:items-center md:justify-center md:p-4">
+    <div className="fixed inset-0 z-40 flex items-center justify-center p-5">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative bg-white dark:bg-slate-800 rounded-t-3xl md:rounded-3xl z-10 shadow-2xl w-full md:max-w-lg">
-        <div className="flex justify-center pt-3 pb-1 md:hidden">
-          <div className="w-10 h-1 bg-slate-200 dark:bg-slate-600 rounded-full" />
-        </div>
-        <div className="flex items-center justify-between px-5 py-4">
-          <h2 className="text-lg font-bold text-slate-800 dark:text-slate-100">アイテムを追加</h2>
+      <div className="relative bg-white dark:bg-slate-800 rounded-3xl z-10 shadow-2xl w-full max-w-sm">
+        <div className="flex items-center justify-between px-5 pt-5 pb-4">
+          <h2 className="text-base font-bold text-slate-800 dark:text-slate-100">アイテムを追加</h2>
           <button onClick={onClose} className="text-slate-300 dark:text-slate-500 hover:text-slate-500 dark:hover:text-slate-300 text-xl p-1">✕</button>
         </div>
-        <form onSubmit={handleSubmit} className="px-5 pb-8 space-y-4 overflow-y-auto max-h-[75vh]">
-          {/* カテゴリを先頭に */}
-          <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">カテゴリ</label>
-            <div className="flex gap-2 flex-wrap mt-1.5">
-              {categories.map((cat) => {
-                const colors = CATEGORY_COLORS[cat.colorIndex % CATEGORY_COLORS.length];
-                return (
-                  <button key={cat.id} type="button" onClick={() => setCategoryId(cat.id)}
-                    className={`px-3 py-1.5 rounded-full text-sm transition-all ${categoryId === cat.id ? colors.activeTab + " shadow-sm" : colors.tab + " hover:opacity-80"}`}>
-                    {cat.emoji} {cat.name}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <div>
-            <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-              商品名 *
-            </label>
-            <input type="text" value={itemName} onChange={(e) => setItemName(e.target.value)} placeholder="例: 牛乳"
-              className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
-          </div>
+        <form onSubmit={handleSubmit} className="px-5 pb-5 space-y-3">
+          <input type="text" value={itemName} onChange={(e) => setItemName(e.target.value)} placeholder="商品名を入力…" autoFocus
+            className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
           {formError && (
             <p className="text-xs text-red-500 dark:text-red-400 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-3 py-2">
               {formError}
             </p>
           )}
-          <button type="submit"
-            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-violet-500 to-purple-600 text-white font-semibold text-base shadow-md hover:shadow-lg transition-shadow">
-            追加する
-          </button>
+          <div className="flex gap-2 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+              キャンセル
+            </button>
+            <button type="submit"
+              className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white font-semibold text-sm shadow-md hover:shadow-lg transition-shadow">
+              追加する
+            </button>
+          </div>
         </form>
       </div>
     </div>
