@@ -11,6 +11,7 @@ export const metadata: Metadata = {
     title: "買い物メモ",
   },
   icons: {
+    icon: "/icon.png",
     apple: "/apple-icon.png",
   },
 };

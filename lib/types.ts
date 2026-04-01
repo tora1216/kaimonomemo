@@ -9,6 +9,7 @@ export type Store = {
   id: string;
   name: string;
   memo?: string;
+  favorite?: boolean;
 };
 
 export type PriceEntry = {

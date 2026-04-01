@@ -1,4 +1,4 @@
-export const APP_VERSION = "1.2.0";
+export const APP_VERSION = "1.2.1";
 
 export type ChangelogEntry = {
   version: string;
@@ -8,6 +8,15 @@ export type ChangelogEntry = {
 };
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "1.2.1",
+    date: "2026-04-01",
+    title: "入力UXの改善",
+    changes: [
+      "店舗選択をボタン式に変更",
+      "お気に入り店舗機能の追加（店舗管理から設定）",
+    ],
+  },
   {
     version: "1.2.0",
     date: "2026-03-25",

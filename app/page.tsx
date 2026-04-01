@@ -614,6 +614,7 @@ export default function Home() {
           onDelete={handleDeleteStore}
           onReorder={(reordered) => updateSharedData({ stores: reordered })}
           onUpdateMemo={(id, memo) => updateSharedData({ stores: stores.map((s) => s.id === id ? { ...s, memo } : s) })}
+          onToggleFavorite={(id) => updateSharedData({ stores: stores.map((s) => s.id === id ? { ...s, favorite: !s.favorite } : s) })}
         />
       )}
       {showSettings && (
@@ -1150,10 +1151,37 @@ function PriceDetailSheet({
             <form onSubmit={handleAdd} className="mt-3 bg-slate-50 dark:bg-slate-700/50 rounded-2xl p-4 space-y-3 mb-2">
               <div>
                 <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">店舗</label>
-                <select value={storeId} onChange={(e) => setStoreId(e.target.value)}
-                  className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200">
-                  {stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
+                <div className="mt-1">
+                  {stores.some((s) => s.favorite) ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      {stores.filter((s) => s.favorite).slice(0, 5).map((s) => (
+                        <button key={s.id} type="button" onClick={() => setStoreId(s.id)}
+                          className={`h-9 rounded-2xl text-xs font-medium transition-all border-2 truncate px-1 ${storeId === s.id ? "border-violet-500 bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-300" : "border-transparent bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600"}`}>
+                          {s.name}
+                        </button>
+                      ))}
+                      {stores.some((s) => !s.favorite) && (
+                        <select value={stores.find((s) => s.id === storeId)?.favorite ? "" : storeId}
+                          onChange={(e) => { if (e.target.value) setStoreId(e.target.value); }}
+                          className="h-9 border border-slate-200 dark:border-slate-600 rounded-2xl px-2 text-xs text-center focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-400">
+                          <option value="">その他...</option>
+                          {stores.filter((s) => !s.favorite).map((s) => (
+                            <option key={s.id} value={s.id}>{s.name}</option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+                  ) : (
+                    <select value={storeId}
+                      onChange={(e) => { if (e.target.value) setStoreId(e.target.value); }}
+                      className="w-full h-9 border border-slate-200 dark:border-slate-600 rounded-xl px-2 text-xs focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-400">
+                      <option value="">店舗を選択...</option>
+                      {stores.map((s) => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">金額（円）<span className="ml-1.5 font-normal text-slate-400 dark:text-slate-500">※税込み価格を入力</span></label>
@@ -1181,11 +1209,11 @@ function PriceDetailSheet({
                 <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">数量・単位（任意）</label>
                 <div className="flex items-center gap-2 mt-1">
                   <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="例: 500" min="0" step="any"
-                    className="w-24 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
-                  <div className="flex flex-wrap gap-1.5">
+                    className="w-24 shrink-0 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
+                  <div className="grid grid-cols-4 gap-1 flex-1">
                     {["個", "枚", "本", "袋", "g", "kg", "ml", "L"].map((u) => (
                       <button key={u} type="button" onClick={() => setUnit(unit === u ? "" : u)}
-                        className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all ${unit === u ? "bg-violet-500 text-white" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600"}`}>
+                        className={`py-1 rounded-xl text-xs font-medium transition-all ${unit === u ? "bg-violet-500 text-white shadow-sm" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600"}`}>
                         {u}
                       </button>
                     ))}
@@ -1734,7 +1762,7 @@ function SettingsDialog({
 }
 
 // ===================== StoreManagerDialog =====================
-function SortableStoreRow({ store, isEditing, editMemo, onEditMemoChange, onSaveMemo, onCancelEdit, onStartEdit, onDelete }: {
+function SortableStoreRow({ store, isEditing, editMemo, onEditMemoChange, onSaveMemo, onCancelEdit, onStartEdit, onDelete, onToggleFavorite }: {
   store: Store;
   isEditing: boolean;
   editMemo: string;
@@ -1743,6 +1771,7 @@ function SortableStoreRow({ store, isEditing, editMemo, onEditMemoChange, onSave
   onCancelEdit: () => void;
   onStartEdit: () => void;
   onDelete: () => void;
+  onToggleFavorite: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: store.id, disabled: isEditing });
   const style = { transform: CSS.Transform.toString(transform), transition };
@@ -1761,6 +1790,7 @@ function SortableStoreRow({ store, isEditing, editMemo, onEditMemoChange, onSave
           </div>
         </div>
         <div className="flex items-center gap-0.5 shrink-0">
+          <button onClick={onToggleFavorite} className={`p-1.5 rounded-lg transition-colors ${store.favorite ? "text-amber-400" : "text-slate-300 dark:text-slate-600 hover:text-amber-300"}`}>★</button>
           <button onClick={onStartEdit} className="p-1.5 rounded-lg text-slate-300 dark:text-slate-600 hover:text-violet-400 transition-colors">
             <PencilIcon className="h-3.5 w-3.5" />
           </button>
@@ -1784,7 +1814,7 @@ function SortableStoreRow({ store, isEditing, editMemo, onEditMemoChange, onSave
 }
 
 function StoreManagerDialog({
-  stores, onClose, onAdd, onDelete, onReorder, onUpdateMemo,
+  stores, onClose, onAdd, onDelete, onReorder, onUpdateMemo, onToggleFavorite,
 }: {
   stores: Store[];
   onClose: () => void;
@@ -1792,6 +1822,7 @@ function StoreManagerDialog({
   onDelete: (id: string) => void;
   onReorder: (stores: Store[]) => void;
   onUpdateMemo: (id: string, memo: string) => void;
+  onToggleFavorite: (id: string) => void;
 }) {
   const [newName, setNewName] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -1844,6 +1875,7 @@ function StoreManagerDialog({
                     onSaveMemo={() => { onUpdateMemo(store.id, editMemoText); setEditingMemoId(null); }}
                     onCancelEdit={() => setEditingMemoId(null)}
                     onDelete={() => setConfirmDeleteId(store.id)}
+                    onToggleFavorite={() => onToggleFavorite(store.id)}
                   />
                 ))}
               </SortableContext>
