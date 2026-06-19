@@ -50,6 +50,4 @@ export const CATEGORY_COLORS = [
   },
 ] as const;
 
-export const EMOJI_OPTIONS = ["🥬", "🍖", "🧃", "🫙", "🧹", "🛁", "💊", "🐾", "🌿", "🍳", "🥐", "🫐", "🏠", "👶", "🐶", "🎁"];
-
 export const ICON_BTN = "rounded-full p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-700 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-200 transition-colors";

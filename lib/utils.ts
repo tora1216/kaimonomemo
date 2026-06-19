@@ -2,6 +2,18 @@ export function uid(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
+const EMOJI_RE = /\p{Extended_Pictographic}|\p{Regional_Indicator}/u;
+
+/** 入力文字列から最初の絵文字（合字・国旗なども1文字として扱う）だけを取り出す。見つからなければ空文字 */
+export function getFirstEmoji(text: string): string {
+  if (!text) return "";
+  const segmenter = new Intl.Segmenter("ja", { granularity: "grapheme" });
+  for (const { segment } of segmenter.segment(text)) {
+    if (EMOJI_RE.test(segment)) return segment;
+  }
+  return "";
+}
+
 export function loadData<T>(key: string, fallback: T): T {
   const raw = localStorage.getItem(key);
   if (!raw) return fallback;

@@ -34,9 +34,9 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Category, Store, Item, PriceEntry, ShoppingItem } from "@/lib/types";
-import { CATEGORY_COLORS, EMOJI_OPTIONS, ICON_BTN } from "@/lib/constants";
+import { CATEGORY_COLORS, ICON_BTN } from "@/lib/constants";
 import { DEFAULT_CATEGORIES, DEFAULT_STORES } from "@/lib/defaultData";
-import { uid, calcUnitPrice, loadHistory, updateHistory } from "@/lib/utils";
+import { uid, calcUnitPrice, loadHistory, updateHistory, getFirstEmoji } from "@/lib/utils";
 import { initSharedData, subscribeSharedData, updateSharedData, setCurrentRoom } from "@/lib/firestore";
 import {
   getOrCreateRoomId, getRoomShareUrl,
@@ -1495,15 +1495,14 @@ function CategoryManagerDialog({
   const confirmCat = categories.find((c) => c.id === confirmDeleteId);
   const itemCount  = (id: string) => items.filter((i) => i.categoryId === id).length;
 
-  const EmojiGrid = ({ value, onChange }: { value: string; onChange: (e: string) => void }) => (
-    <div className="grid grid-cols-8 gap-1">
-      {EMOJI_OPTIONS.map((e) => (
-        <button key={e} type="button" onClick={() => onChange(e)}
-          className={`text-lg p-1 rounded-lg transition-all ${value === e ? "bg-violet-100 dark:bg-violet-900/40 scale-110 shadow-sm" : "hover:bg-slate-100 dark:hover:bg-slate-700"}`}>
-          {e}
-        </button>
-      ))}
-    </div>
+  const EmojiInput = ({ value, onChange }: { value: string; onChange: (e: string) => void }) => (
+    <input
+      type="text"
+      value={value}
+      onChange={(e) => onChange(getFirstEmoji(e.target.value))}
+      placeholder="🙂"
+      className="w-16 text-center text-2xl border border-slate-200 dark:border-slate-600 rounded-xl px-2 py-1 focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700"
+    />
   );
 
   return (
@@ -1525,9 +1524,11 @@ function CategoryManagerDialog({
                 if (editingId === cat.id) {
                   return (
                     <div key={cat.id} className="bg-slate-50 dark:bg-slate-700/50 rounded-2xl p-3 space-y-3">
-                      <EmojiGrid value={editEmoji} onChange={setEditEmoji} />
-                      <input ref={editNameRef} type="text" value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="カテゴリ名"
-                        className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200" />
+                      <div className="flex gap-2">
+                        <EmojiInput value={editEmoji} onChange={setEditEmoji} />
+                        <input ref={editNameRef} type="text" value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="カテゴリ名"
+                          className="flex-1 min-w-0 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200" />
+                      </div>
                       <div className="flex gap-2">
                         <button onClick={() => setEditingId(null)} className="flex-1 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">キャンセル</button>
                         <button onClick={saveEdit} className="flex-1 py-2 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white text-sm font-semibold">保存</button>
@@ -1548,14 +1549,16 @@ function CategoryManagerDialog({
         <div className="border-t border-slate-100 dark:border-slate-700 px-4 py-3">
           {showAddForm ? (
             <div className="space-y-3">
-              <EmojiGrid value={newEmoji} onChange={setNewEmoji} />
-              <input
-                ref={newNameRef}
-                type="text" value={newName} onChange={(e) => setNewName(e.target.value)}
-                placeholder="カテゴリ名"
-                onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }}
-                className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500"
-              />
+              <div className="flex gap-2">
+                <EmojiInput value={newEmoji} onChange={setNewEmoji} />
+                <input
+                  ref={newNameRef}
+                  type="text" value={newName} onChange={(e) => setNewName(e.target.value)}
+                  placeholder="カテゴリ名"
+                  onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }}
+                  className="flex-1 min-w-0 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500"
+                />
+              </div>
               <div className="flex gap-2">
                 <button onClick={() => { setShowAddForm(false); setNewName(""); setNewEmoji("🏷️"); }}
                   className="flex-1 py-2 rounded-xl border border-slate-200 dark:border-slate-600 text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
