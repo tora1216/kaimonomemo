@@ -374,7 +374,7 @@ export default function Home() {
               )}
             </div>
           ) : (
-            <div className="flex flex-wrap gap-1.5 items-center flex-1">
+            <div className="flex flex-nowrap gap-1.5 items-center flex-1 min-w-0 overflow-x-auto scrollbar-hide">
               {categories.map((cat) => {
                 const colors   = CATEGORY_COLORS[cat.colorIndex % CATEGORY_COLORS.length];
                 const isActive = activeCategory === cat.id;
@@ -383,7 +383,7 @@ export default function Home() {
                     key={cat.id}
                     onClick={() => setActiveCategory(cat.id)}
                     title={cat.name}
-                    className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-sm font-medium transition-all ${
+                    className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-sm font-medium transition-all flex-shrink-0 ${
                       isActive ? colors.activeTab + " shadow-sm" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:opacity-80"
                     }`}
                   >
@@ -394,7 +394,7 @@ export default function Home() {
               })}
               <button
                 onClick={() => setShowCategoryManager(true)}
-                className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 text-base flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors"
+                className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-400 dark:text-slate-500 text-base flex items-center justify-center hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors flex-shrink-0"
               >
                 +
               </button>
@@ -729,9 +729,6 @@ function SortableItemCard({
     return item.prices.find((p) => p.price === mp) ?? null;
   })();
   const minStore = bestEntry ? stores.find((s) => s.id === bestEntry.storeId) : null;
-  const bestUnitPrice = bestEntry?.quantity && bestEntry?.unit
-    ? calcUnitPrice(bestEntry.price, bestEntry.quantity, bestEntry.unit)
-    : null;
 
   return (
     <div
@@ -749,13 +746,6 @@ function SortableItemCard({
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full flex-shrink-0 ${activeColors.dot}`} />
           <span className="font-semibold text-slate-700 dark:text-slate-200 text-sm truncate flex-1">{item.name}</span>
-          {minPrice !== null ? (
-            <span className={`text-sm font-bold flex-shrink-0 ${activeColors.price}`}>
-              ¥{minPrice.toLocaleString()}
-            </span>
-          ) : (
-            <span className="text-xs text-slate-300 dark:text-slate-600 flex-shrink-0">未登録</span>
-          )}
         </div>
         <div className="flex items-center justify-between mt-0.5 pl-4">
           <span className="text-xs text-slate-400 dark:text-slate-500 truncate">
@@ -763,9 +753,13 @@ function SortableItemCard({
               ? <>{minStore.name}{item.prices.length > 1 && <span className="ml-1 text-slate-300 dark:text-slate-600">+{item.prices.length - 1}</span>}</>
               : item.prices.length === 0 ? "価格を追加" : ""}
           </span>
-          {bestUnitPrice && (
-            <span className="text-xs text-slate-400 dark:text-slate-500 flex-shrink-0">¥{bestUnitPrice.value}/{bestUnitPrice.per}</span>
-          )}
+          {!editMode && (minPrice !== null ? (
+            <span className={`text-sm font-bold flex-shrink-0 ${activeColors.price}`}>
+              ¥{minPrice.toLocaleString()}
+            </span>
+          ) : (
+            <span className="text-xs text-slate-300 dark:text-slate-600 flex-shrink-0">未登録</span>
+          ))}
         </div>
       </button>
       {editMode && (
@@ -837,6 +831,9 @@ function PriceDetailSheet({
 
   // アイテム削除確認フラグ
   const [confirmDelete, setConfirmDelete] = useState(false);
+
+  // 価格エントリ削除確認
+  const [confirmDeleteEntryId, setConfirmDeleteEntryId] = useState<string | null>(null);
 
   // カテゴリ変更の保留（確認前は適用しない）
   const [pendingCategoryId, setPendingCategoryId] = useState<string | null>(null);
@@ -1141,7 +1138,7 @@ function PriceDetailSheet({
                       <button onClick={() => startEdit(entry)} className="text-slate-300 dark:text-slate-600 hover:text-violet-400 transition-colors p-1">
                         <PencilIcon className="h-3.5 w-3.5" />
                       </button>
-                      <button onClick={() => onDeleteEntry(entry.id)} className="text-slate-300 dark:text-slate-600 hover:text-red-400 transition-colors p-1">
+                      <button onClick={() => setConfirmDeleteEntryId(entry.id)} className="text-slate-300 dark:text-slate-600 hover:text-red-400 transition-colors p-1">
                         <TrashIcon className="h-3.5 w-3.5" />
                       </button>
                     </div>
@@ -1331,6 +1328,32 @@ function PriceDetailSheet({
             </div>
           </div>
         )}
+
+        {/* 価格エントリ削除確認オーバーレイ */}
+        {confirmDeleteEntryId && (() => {
+          const target = currentItem.prices.find((p) => p.id === confirmDeleteEntryId);
+          const targetStore = target ? stores.find((s) => s.id === target.storeId) : null;
+          return (
+            <div className="absolute inset-0 bg-white dark:bg-slate-800 rounded-t-3xl md:rounded-3xl flex flex-col items-center justify-center p-6 gap-4 z-10">
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 text-center">
+                {targetStore?.name ?? "不明"}{target && <>・¥{target.price.toLocaleString()}</>} の価格を削除してよろしいですか？
+              </p>
+              <p className="text-xs text-slate-500 dark:text-slate-400 text-center leading-relaxed">
+                この操作は元に戻せません。
+              </p>
+              <div className="flex gap-3 w-full max-w-xs">
+                <button onClick={() => setConfirmDeleteEntryId(null)}
+                  className="flex-1 py-2.5 rounded-xl border border-slate-200 dark:border-slate-600 text-sm text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+                  キャンセル
+                </button>
+                <button onClick={() => { onDeleteEntry(confirmDeleteEntryId); setConfirmDeleteEntryId(null); }}
+                  className="flex-1 py-2.5 rounded-xl bg-red-500 text-white text-sm font-semibold hover:bg-red-600 transition-colors">
+                  削除
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* カテゴリ変更確認 */}
         {confirmCatChange && pendingCategoryId && (() => {
