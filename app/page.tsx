@@ -14,6 +14,7 @@ import {
   XMarkIcon,
   LinkIcon,
   Bars3Icon,
+  ChevronDownIcon,
 } from "@heroicons/react/24/outline";
 import {
   DndContext,
@@ -514,7 +515,7 @@ export default function Home() {
                   items={filteredItems.map((i) => i.id)}
                   strategy={rectSortingStrategy}
                 >
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-4">
                     {filteredItems.map((item) => (
                       <SortableItemCard
                         key={item.id}
@@ -1164,14 +1165,17 @@ function PriceDetailSheet({
                         </button>
                       ))}
                       {stores.some((s) => !s.favorite) && (
-                        <select value={stores.find((s) => s.id === storeId)?.favorite ? "" : storeId}
-                          onChange={(e) => { if (e.target.value) setStoreId(e.target.value); }}
-                          className="h-9 border border-slate-200 dark:border-slate-600 rounded-2xl px-2 text-xs text-center focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-400">
-                          <option value="">その他...</option>
-                          {stores.filter((s) => !s.favorite).map((s) => (
-                            <option key={s.id} value={s.id}>{s.name}</option>
-                          ))}
-                        </select>
+                        <div className="relative h-9">
+                          <select value={stores.find((s) => s.id === storeId)?.favorite ? "" : storeId}
+                            onChange={(e) => { if (e.target.value) setStoreId(e.target.value); }}
+                            className="h-9 w-full appearance-none border border-slate-200 dark:border-slate-600 rounded-2xl pl-2 pr-5 text-xs text-center focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-400">
+                            <option value="">その他...</option>
+                            {stores.filter((s) => !s.favorite).map((s) => (
+                              <option key={s.id} value={s.id}>{s.name}</option>
+                            ))}
+                          </select>
+                          <ChevronDownIcon className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400 dark:text-slate-500" />
+                        </div>
                       )}
                     </div>
                   ) : (
