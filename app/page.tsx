@@ -828,6 +828,9 @@ function PriceDetailSheet({
   const [editDiscountPct, setEditDiscountPct] = useState<number | null>(null);
   const [editTaxPct,      setEditTaxPct]      = useState<number | null>(null);
 
+  // type="number" はフォーカス中にマウスホイールで値が変わってしまうため、その場合だけフォーカスを外す
+  const blurOnWheel = (e: React.WheelEvent<HTMLInputElement>) => e.currentTarget.blur();
+
   const price     = applyModifiers(basePrice,     discountPct, taxPct);
   const editPrice = applyModifiers(editBasePrice, editDiscountPct, editTaxPct);
 
@@ -1042,7 +1045,7 @@ function PriceDetailSheet({
                       </select>
                       <div>
                         <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">金額（円）<span className="ml-1.5 font-normal text-slate-400 dark:text-slate-500">※税込み価格を入力</span></label>
-                        <input type="number" value={editPrice} onChange={(e) => { setEditBasePrice(e.target.value); setEditDiscountPct(null); setEditTaxPct(null); }} placeholder="金額（円）" min="0"
+                        <input type="number" inputMode="numeric" value={editPrice} onChange={(e) => { setEditBasePrice(e.target.value); setEditDiscountPct(null); setEditTaxPct(null); }} onWheel={blurOnWheel} placeholder="金額（円）" min="0"
                           className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
                         <div className="flex gap-1.5 mt-1.5 flex-wrap">
                           {[5, 10, 15].map((pct) => (
@@ -1064,7 +1067,7 @@ function PriceDetailSheet({
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <input type="number" value={editQty} onChange={(e) => setEditQty(e.target.value)} placeholder="数量" min="0" step="any"
+                          <input type="number" inputMode="decimal" value={editQty} onChange={(e) => setEditQty(e.target.value)} onWheel={blurOnWheel} placeholder="数量" min="0" step="any"
                             className="w-20 border border-slate-200 dark:border-slate-600 rounded-xl px-2.5 py-2 text-sm bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
                           <div className="flex flex-wrap gap-1">
                             {["個","枚","本","袋","g","kg","ml","L"].map((u) => (
@@ -1185,7 +1188,7 @@ function PriceDetailSheet({
               </div>
               <div>
                 <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">金額（円）<span className="ml-1.5 font-normal text-slate-400 dark:text-slate-500">※税込み価格を入力</span></label>
-                <input type="number" value={price} onChange={(e) => { setBasePrice(e.target.value); setDiscountPct(null); setTaxPct(null); }} placeholder="例: 198" min="0" required
+                <input type="number" inputMode="numeric" value={price} onChange={(e) => { setBasePrice(e.target.value); setDiscountPct(null); setTaxPct(null); }} onWheel={blurOnWheel} placeholder="例: 198" min="0" required
                   className="w-full mt-1 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
                 <div className="flex gap-1.5 mt-1.5 flex-wrap">
                   {[5, 10, 15].map((pct) => (
@@ -1208,7 +1211,7 @@ function PriceDetailSheet({
               <div>
                 <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">数量・単位（任意）</label>
                 <div className="flex items-center gap-2 mt-1">
-                  <input type="number" value={quantity} onChange={(e) => setQuantity(e.target.value)} placeholder="例: 500" min="0" step="any"
+                  <input type="number" inputMode="decimal" value={quantity} onChange={(e) => setQuantity(e.target.value)} onWheel={blurOnWheel} placeholder="例: 500" min="0" step="any"
                     className="w-24 shrink-0 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
                   <div className="grid grid-cols-4 gap-1 flex-1">
                     {["個", "枚", "本", "袋", "g", "kg", "ml", "L"].map((u) => (
@@ -1456,8 +1459,6 @@ function CategoryManagerDialog({
   const [showAddForm,     setShowAddForm]     = useState(false);
   const [newName,         setNewName]         = useState("");
   const [newEmoji,        setNewEmoji]        = useState("🏷️");
-  const newNameRef  = useRef<HTMLInputElement>(null);
-  const editNameRef = useRef<HTMLInputElement>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 300, tolerance: 8 } }),
@@ -1526,7 +1527,7 @@ function CategoryManagerDialog({
                     <div key={cat.id} className="bg-slate-50 dark:bg-slate-700/50 rounded-2xl p-3 space-y-3">
                       <div className="flex gap-2">
                         <EmojiInput value={editEmoji} onChange={setEditEmoji} />
-                        <input ref={editNameRef} type="text" value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="カテゴリ名"
+                        <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="カテゴリ名" autoFocus
                           className="flex-1 min-w-0 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200" />
                       </div>
                       <div className="flex gap-2">
@@ -1552,9 +1553,8 @@ function CategoryManagerDialog({
               <div className="flex gap-2">
                 <EmojiInput value={newEmoji} onChange={setNewEmoji} />
                 <input
-                  ref={newNameRef}
                   type="text" value={newName} onChange={(e) => setNewName(e.target.value)}
-                  placeholder="カテゴリ名"
+                  placeholder="カテゴリ名" autoFocus
                   onKeyDown={(e) => { if (e.key === "Enter") handleAdd(); }}
                   className="flex-1 min-w-0 border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500"
                 />
