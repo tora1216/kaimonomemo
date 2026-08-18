@@ -1165,7 +1165,7 @@ function PriceDetailSheet({
                         <div className="relative h-9">
                           <select value={stores.find((s) => s.id === storeId)?.favorite ? "" : storeId}
                             onChange={(e) => { if (e.target.value) setStoreId(e.target.value); }}
-                            className="h-9 w-full appearance-none border border-slate-200 dark:border-slate-600 rounded-2xl pl-2 pr-5 text-xs text-center focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-400">
+                            className="h-9 w-full appearance-none border border-slate-200 dark:border-slate-600 rounded-2xl px-5 text-xs text-center focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-400">
                             <option value="">その他...</option>
                             {stores.filter((s) => !s.favorite).map((s) => (
                               <option key={s.id} value={s.id}>{s.name}</option>
