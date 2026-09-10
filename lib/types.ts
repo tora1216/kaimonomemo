@@ -21,6 +21,7 @@ export type PriceEntry = {
   quantity?: number;
   unit?: string;
   discountPct?: number;
+  label?: string;
 };
 
 export type Item = {

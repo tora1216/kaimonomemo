@@ -68,6 +68,7 @@ export default function Home() {
   const [roomId,              setRoomId]              = useState("");
   const [firestoreKey,        setFirestoreKey]        = useState<string | null>(null);
   const [selectedItemDefaultStore, setSelectedItemDefaultStore] = useState("");
+  const [openPriceFormForNewItem, setOpenPriceFormForNewItem] = useState(false);
   const [showPassphraseJoin,  setShowPassphraseJoin]  = useState(false);
   const roomIdRef = useRef("");
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -178,10 +179,12 @@ export default function Home() {
     if (!target) updateSharedData({ items: [...items, finalItem] });
     setActiveCategory(categoryId);
     setShowAddDialog(false);
+    setSelectedItem(finalItem);
+    setOpenPriceFormForNewItem(true);
   }
 
-  function handleAddPriceForItem(itemId: string, storeId: string, price: number, memo: string, quantity?: number, unit?: string, discountPct?: number) {
-    const entry: PriceEntry = { id: uid(), storeId, price, memo, date: new Date().toISOString().split("T")[0], ...(quantity && unit ? { quantity, unit } : {}), ...(discountPct ? { discountPct } : {}) };
+  function handleAddPriceForItem(itemId: string, storeId: string, price: number, memo: string, quantity?: number, unit?: string, discountPct?: number, label?: string) {
+    const entry: PriceEntry = { id: uid(), storeId, price, memo, date: new Date().toISOString().split("T")[0], ...(quantity && unit ? { quantity, unit } : {}), ...(discountPct ? { discountPct } : {}), ...(label ? { label } : {}) };
     const newItems = items.map((i) => (i.id === itemId ? { ...i, prices: [...i.prices, entry] } : i));
     updateSharedData({ items: newItems });
     addToMemoHistory(memo);
@@ -200,7 +203,7 @@ export default function Home() {
   function handleEditEntry(
     itemId: string,
     entryId: string,
-    updates: { storeId: string; price: number; memo: string; quantity?: number; unit?: string; discountPct?: number },
+    updates: { storeId: string; price: number; memo: string; quantity?: number; unit?: string; discountPct?: number; label?: string },
   ) {
     const date = new Date().toISOString().split("T")[0];
     const newItems = items.map((i) =>
@@ -569,9 +572,9 @@ export default function Home() {
           categories={categories}
           memoHistory={memoHistory}
           defaultStoreId={selectedItemDefaultStore || undefined}
-          initialShowForm={!!selectedItemDefaultStore}
-          onClose={() => { setSelectedItem(null); setSelectedItemDefaultStore(""); }}
-          onAddPrice={(storeId, price, memo, quantity, unit, discountPct) => handleAddPriceForItem(selectedItem.id, storeId, price, memo, quantity, unit, discountPct)}
+          initialShowForm={!!selectedItemDefaultStore || openPriceFormForNewItem}
+          onClose={() => { setSelectedItem(null); setSelectedItemDefaultStore(""); setOpenPriceFormForNewItem(false); }}
+          onAddPrice={(storeId, price, memo, quantity, unit, discountPct, label) => handleAddPriceForItem(selectedItem.id, storeId, price, memo, quantity, unit, discountPct, label)}
           onDeleteEntry={(entryId) => handleDeleteEntry(selectedItem.id, entryId)}
           onEditEntry={(entryId, updates) => handleEditEntry(selectedItem.id, entryId, updates)}
           onDeleteItem={() => handleDeleteItem(selectedItem.id)}
@@ -776,7 +779,9 @@ function SortableItemCard({
 }
 
 // ===================== PriceDetailSheet =====================
-type EntryUpdates = { storeId: string; price: number; memo: string; quantity?: number; unit?: string; discountPct?: number };
+type EntryUpdates = { storeId: string; price: number; memo: string; quantity?: number; unit?: string; discountPct?: number; label?: string };
+
+const SALE_LABELS = ["セール", "特売", "クーポン", "見切り品"];
 
 function applyModifiers(base: string, discount: number | null, tax: number | null): string {
   const p = parseInt(base);
@@ -797,7 +802,7 @@ function PriceDetailSheet({
   defaultStoreId?: string;
   initialShowForm?: boolean;
   onClose: () => void;
-  onAddPrice: (storeId: string, price: number, memo: string, quantity?: number, unit?: string, discountPct?: number) => void;
+  onAddPrice: (storeId: string, price: number, memo: string, quantity?: number, unit?: string, discountPct?: number, label?: string) => void;
   onDeleteEntry: (entryId: string) => void;
   onEditEntry: (entryId: string, updates: EntryUpdates) => void;
   onDeleteItem: () => void;
@@ -812,6 +817,7 @@ function PriceDetailSheet({
   const [unit,         setUnit]         = useState("");
   const [discountPct,  setDiscountPct]  = useState<number | null>(null);
   const [taxPct,       setTaxPct]       = useState<number | null>(null);
+  const [label,        setLabel]        = useState("");
 
   // 編集中エントリの state
   const [editingId,       setEditingId]       = useState<string | null>(null);
@@ -822,6 +828,7 @@ function PriceDetailSheet({
   const [editUnit,        setEditUnit]        = useState("");
   const [editDiscountPct, setEditDiscountPct] = useState<number | null>(null);
   const [editTaxPct,      setEditTaxPct]      = useState<number | null>(null);
+  const [editLabel,       setEditLabel]       = useState("");
 
   // type="number" はフォーカス中にマウスホイールで値が変わってしまうため、その場合だけフォーカスを外す
   const blurOnWheel = (e: React.WheelEvent<HTMLInputElement>) => e.currentTarget.blur();
@@ -896,8 +903,8 @@ function PriceDetailSheet({
     const p = parseInt(price);
     if (!p || !storeId) return;
     const qty = quantity ? parseFloat(quantity) : undefined;
-    onAddPrice(storeId, p, memo, qty, unit || undefined, discountPct ?? undefined);
-    setBasePrice(""); setMemo(""); setQuantity(""); setUnit(""); setDiscountPct(null); setTaxPct(null); setShowForm(false);
+    onAddPrice(storeId, p, memo, qty, unit || undefined, discountPct ?? undefined, label || undefined);
+    setBasePrice(""); setMemo(""); setQuantity(""); setUnit(""); setDiscountPct(null); setTaxPct(null); setLabel(""); setShowForm(false);
   }
 
   function startEdit(entry: PriceEntry) {
@@ -913,6 +920,7 @@ function PriceDetailSheet({
     setEditUnit(entry.unit ?? "");
     setEditDiscountPct(entry.discountPct ?? null);
     setEditTaxPct(null);
+    setEditLabel(entry.label ?? "");
     setShowForm(false);
   }
 
@@ -921,7 +929,7 @@ function PriceDetailSheet({
     const p = parseInt(editPrice);
     if (!p) return;
     const qty = editQty ? parseFloat(editQty) : undefined;
-    onEditEntry(editingId, { storeId: editStore, price: p, memo: editMemo, quantity: qty, unit: editUnit || undefined, discountPct: editDiscountPct ?? undefined });
+    onEditEntry(editingId, { storeId: editStore, price: p, memo: editMemo, quantity: qty, unit: editUnit || undefined, discountPct: editDiscountPct ?? undefined, label: editLabel || undefined });
     setEditingId(null);
   }
 
@@ -1078,6 +1086,15 @@ function PriceDetailSheet({
                         </div>
                         {previewUp && <p className="text-xs text-violet-500 dark:text-violet-400 mt-1">→ 単価 ¥{previewUp.value}/{previewUp.per}</p>}
                       </div>
+                      <div className="flex gap-1.5 flex-wrap">
+                        {SALE_LABELS.map((l) => (
+                          <button key={l} type="button"
+                            onClick={() => setEditLabel(editLabel === l ? "" : l)}
+                            className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${editLabel === l ? "bg-rose-500 text-white border-rose-500" : "bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800 hover:bg-rose-100 dark:hover:bg-rose-900/30"}`}>
+                            {l}
+                          </button>
+                        ))}
+                      </div>
                       <input type="text" value={editMemo} onChange={(e) => setEditMemo(e.target.value)} placeholder="メモ（任意）" list="memo-history-edit"
                         className="w-full border border-slate-200 dark:border-slate-600 rounded-xl px-3 py-2 text-sm bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 placeholder:text-slate-300 dark:placeholder:text-slate-500" />
                       <datalist id="memo-history-edit">
@@ -1117,6 +1134,11 @@ function PriceDetailSheet({
                         {entry.discountPct && (
                           <span className="px-1.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400">
                             -{entry.discountPct}%
+                          </span>
+                        )}
+                        {entry.label && (
+                          <span className="px-1.5 py-0.5 rounded-full text-xs font-medium bg-rose-100 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400">
+                            {entry.label}
                           </span>
                         )}
                       </div>
@@ -1232,6 +1254,18 @@ function PriceDetailSheet({
                     <p className="text-xs text-violet-500 dark:text-violet-400 mt-1">→ 単価 ¥{up.value}/{up.per}</p>
                   ) : null;
                 })()}
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">ラベル（任意）</label>
+                <div className="flex gap-1.5 flex-wrap mt-1">
+                  {SALE_LABELS.map((l) => (
+                    <button key={l} type="button"
+                      onClick={() => setLabel(label === l ? "" : l)}
+                      className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${label === l ? "bg-rose-500 text-white border-rose-500" : "bg-rose-50 dark:bg-rose-900/20 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800 hover:bg-rose-100 dark:hover:bg-rose-900/30"}`}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div>
                 <label className="text-xs text-slate-500 dark:text-slate-400 font-medium">メモ（任意）</label>
@@ -1394,8 +1428,20 @@ function AddDialog({
   const [formError, setFormError] = useState("");
 
   useEffect(() => {
+    const scrollY = window.scrollY;
+    document.body.style.position = "fixed";
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.left = "0";
+    document.body.style.right = "0";
     document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = ""; };
+    return () => {
+      document.body.style.position = "";
+      document.body.style.top = "";
+      document.body.style.left = "";
+      document.body.style.right = "";
+      document.body.style.overflow = "";
+      window.scrollTo(0, scrollY);
+    };
   }, []);
 
   function handleSubmit(e: React.SyntheticEvent) {
