@@ -1,4 +1,4 @@
-export const APP_VERSION = "1.2.1";
+export const APP_VERSION = "1.3.0";
 
 export type ChangelogEntry = {
   version: string;
@@ -8,6 +8,16 @@ export type ChangelogEntry = {
 };
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: "1.3.0",
+    date: "2026-10-09",
+    title: "お気に入り機能の追加",
+    changes: [
+      "商品を★マークでお気に入り登録",
+      "カテゴリタブの先頭からお気に入り一覧を表示",
+      "店舗管理で店舗名を編集可能に",
+    ],
+  },
   {
     version: "1.2.1",
     date: "2026-04-01",

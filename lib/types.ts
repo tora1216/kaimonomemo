@@ -29,6 +29,7 @@ export type Item = {
   categoryId: string;
   name: string;
   prices: PriceEntry[];
+  favorite?: boolean;
 };
 
 export type ShoppingItem = {

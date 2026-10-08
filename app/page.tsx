@@ -15,7 +15,9 @@ import {
   LinkIcon,
   Bars3Icon,
   ChevronDownIcon,
+  StarIcon,
 } from "@heroicons/react/24/outline";
+import { StarIcon as StarIconSolid } from "@heroicons/react/24/solid";
 import {
   DndContext,
   closestCenter,
@@ -44,6 +46,15 @@ import {
   getStoredPassphrase, storePassphrase, buildFirestoreKey, isFirstJoin,
 } from "@/lib/room";
 import { APP_VERSION, CHANGELOG } from "@/lib/changelog";
+
+const FAVORITES_TAB_ID = "__favorites__";
+const FAVORITES_COLORS = {
+  tab:       "bg-amber-50 text-amber-600 border border-amber-100 dark:bg-amber-900/20 dark:border-amber-800 dark:text-amber-400",
+  activeTab: "bg-amber-500 text-white dark:bg-amber-600",
+  price:     "text-amber-600 dark:text-amber-400",
+  accent:    "border-l-amber-400",
+  dot:       "bg-amber-400 dark:bg-amber-500",
+};
 
 // ===================== Main App =====================
 export default function Home() {
@@ -149,9 +160,11 @@ export default function Home() {
   }, [theme]);
 
 
-  const filteredItems = items.filter((i) => i.categoryId === activeCategory);
-  const activeCat    = categories.find((c) => c.id === activeCategory);
-  const activeColors = CATEGORY_COLORS[(activeCat?.colorIndex ?? 0) % CATEGORY_COLORS.length];
+  const isFavoritesTab = activeCategory === FAVORITES_TAB_ID;
+  const favoriteItems  = useMemo(() => items.filter((i) => i.favorite), [items]);
+  const filteredItems  = isFavoritesTab ? favoriteItems : items.filter((i) => i.categoryId === activeCategory);
+  const activeCat      = categories.find((c) => c.id === activeCategory);
+  const activeColors   = isFavoritesTab ? FAVORITES_COLORS : CATEGORY_COLORS[(activeCat?.colorIndex ?? 0) % CATEGORY_COLORS.length];
 
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
@@ -195,6 +208,10 @@ export default function Home() {
     updateSharedData({ items: newItems });
   }
 
+  function handleToggleFavoriteItem(itemId: string) {
+    updateSharedData({ items: items.map((i) => i.id === itemId ? { ...i, favorite: !i.favorite } : i) });
+  }
+
   function handleDeleteItem(itemId: string) {
     updateSharedData({ items: items.filter((i) => i.id !== itemId) });
     setSelectedItem(null);
@@ -232,6 +249,18 @@ export default function Home() {
 
   const categoryNav = (
     <>
+      <button
+        onClick={() => setActiveCategory(FAVORITES_TAB_ID)}
+        className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium transition-all w-full text-left ${
+          isFavoritesTab ? FAVORITES_COLORS.activeTab + " shadow-sm" : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:opacity-80"
+        }`}
+      >
+        <StarIconSolid className="h-4 w-4" />
+        <span>お気に入り</span>
+        {isFavoritesTab && (
+          <span className="ml-auto text-xs opacity-70">{filteredItems.length}</span>
+        )}
+      </button>
       {categories.map((cat) => {
         const colors   = CATEGORY_COLORS[cat.colorIndex % CATEGORY_COLORS.length];
         const isActive = activeCategory === cat.id;
@@ -378,6 +407,16 @@ export default function Home() {
             </div>
           ) : (
             <div className="flex flex-nowrap gap-1.5 items-center flex-1 min-w-0 overflow-x-auto scrollbar-hide">
+              <button
+                onClick={() => setActiveCategory(FAVORITES_TAB_ID)}
+                title="お気に入り"
+                className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-sm font-medium transition-all flex-shrink-0 ${
+                  isFavoritesTab ? FAVORITES_COLORS.activeTab + " shadow-sm" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:opacity-80"
+                }`}
+              >
+                <StarIconSolid className="h-4 w-4" />
+                {isFavoritesTab && <span className="text-xs">お気に入り</span>}
+              </button>
               {categories.map((cat) => {
                 const colors   = CATEGORY_COLORS[cat.colorIndex % CATEGORY_COLORS.length];
                 const isActive = activeCategory === cat.id;
@@ -425,11 +464,11 @@ export default function Home() {
           <div className="hidden md:flex items-center justify-between px-8 pt-6 pb-4">
             <div>
               <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
-                {activeCat?.emoji} {activeCat?.name}
+                {isFavoritesTab ? <>⭐ お気に入り</> : <>{activeCat?.emoji} {activeCat?.name}</>}
               </h2>
               <p className="text-sm text-slate-400 dark:text-slate-500 mt-0.5">{filteredItems.length}件のアイテム</p>
             </div>
-            {filteredItems.length > 0 && (
+            {filteredItems.length > 0 && !isFavoritesTab && (
               <button
                 onClick={() => setEditMode((v) => !v)}
                 className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold transition-all ${
@@ -504,9 +543,27 @@ export default function Home() {
               <div className="text-center py-20 text-slate-300 dark:text-slate-600 text-sm">読み込み中...</div>
             ) : filteredItems.length === 0 ? (
               <div className="text-center py-24">
-                <div className="text-6xl mb-4">📦</div>
-                <p className="text-slate-400 dark:text-slate-500 text-sm">アイテムがありません</p>
-                <p className="text-slate-300 dark:text-slate-600 text-xs mt-1">右下の＋ボタンから追加してください</p>
+                <div className="text-6xl mb-4">{isFavoritesTab ? "⭐" : "📦"}</div>
+                <p className="text-slate-400 dark:text-slate-500 text-sm">
+                  {isFavoritesTab ? "お気に入りがありません" : "アイテムがありません"}
+                </p>
+                <p className="text-slate-300 dark:text-slate-600 text-xs mt-1">
+                  {isFavoritesTab ? "商品カードの★ボタンから追加してください" : "右下の＋ボタンから追加してください"}
+                </p>
+              </div>
+            ) : isFavoritesTab ? (
+              <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 lg:grid-cols-4">
+                {filteredItems.map((item) => (
+                  <SortableItemCard
+                    key={item.id}
+                    item={item}
+                    stores={stores}
+                    activeColors={activeColors}
+                    editMode={false}
+                    onClick={() => setSelectedItem(item)}
+                    onToggleFavorite={() => handleToggleFavoriteItem(item.id)}
+                  />
+                ))}
               </div>
             ) : (
               <DndContext
@@ -527,6 +584,7 @@ export default function Home() {
                         activeColors={activeColors}
                         editMode={editMode}
                         onClick={() => { if (!editMode) setSelectedItem(item); }}
+                        onToggleFavorite={() => handleToggleFavoriteItem(item.id)}
                       />
                     ))}
                   </div>
@@ -546,7 +604,7 @@ export default function Home() {
       </button>
 
       {/* ── Edit mode toggle (mobile, bottom-left) ── */}
-      {filteredItems.length > 0 && (
+      {filteredItems.length > 0 && !isFavoritesTab && (
         <button
           onClick={() => setEditMode((v) => !v)}
           className={`md:hidden fixed bottom-6 left-6 z-20 flex items-center gap-1.5 rounded-full px-4 py-2.5 text-sm font-semibold shadow-lg active:scale-95 transition-all ${
@@ -580,11 +638,12 @@ export default function Home() {
           onDeleteItem={() => handleDeleteItem(selectedItem.id)}
           onChangeCategory={(catId) => handleChangeItemCategory(selectedItem.id, catId)}
           onRenameItem={(name, catId) => handleRenameItem(selectedItem.id, name, catId)}
+          onToggleFavorite={() => handleToggleFavoriteItem(selectedItem.id)}
         />
       )}
       {showAddDialog && (
         <AddDialog
-          defaultCategoryId={activeCategory}
+          defaultCategoryId={isFavoritesTab ? (categories[0]?.id ?? "") : activeCategory}
           onClose={() => setShowAddDialog(false)}
           onSubmit={handleAddSubmit}
         />
@@ -618,6 +677,7 @@ export default function Home() {
           onDelete={handleDeleteStore}
           onReorder={(reordered) => updateSharedData({ stores: reordered })}
           onUpdateMemo={(id, memo) => updateSharedData({ stores: stores.map((s) => s.id === id ? { ...s, memo } : s) })}
+          onRename={(id, name) => updateSharedData({ stores: stores.map((s) => s.id === id ? { ...s, name } : s) })}
           onToggleFavorite={(id) => updateSharedData({ stores: stores.map((s) => s.id === id ? { ...s, favorite: !s.favorite } : s) })}
         />
       )}
@@ -692,13 +752,14 @@ function PassphraseJoinDialog({
 
 // ===================== SortableItemCard =====================
 function SortableItemCard({
-  item, stores, activeColors, editMode, onClick,
+  item, stores, activeColors, editMode, onClick, onToggleFavorite,
 }: {
   item: Item;
   stores: Store[];
-  activeColors: (typeof CATEGORY_COLORS)[number];
+  activeColors: { tab: string; activeTab: string; price: string; accent: string; dot: string };
   editMode: boolean;
   onClick: () => void;
+  onToggleFavorite: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: item.id,
@@ -741,10 +802,20 @@ function SortableItemCard({
         isDragging ? "opacity-50 shadow-lg scale-105" : "hover:shadow-md dark:hover:shadow-slate-900/50"
       } transition-all`}
     >
+      {!editMode && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }}
+          className={`absolute right-1.5 top-1.5 z-10 p-1 rounded-full transition-colors ${item.favorite ? "text-amber-400" : "text-slate-200 dark:text-slate-600 hover:text-amber-300"}`}
+          aria-label="お気に入り"
+        >
+          {item.favorite ? <StarIconSolid className="h-4 w-4" /> : <StarIcon className="h-4 w-4" />}
+        </button>
+      )}
       <button
         onClick={onClick}
         disabled={editMode}
-        className={`w-full text-left px-3 py-2 ${editMode ? "pr-12" : "pr-3"} active:scale-95 transition-transform disabled:active:scale-100`}
+        className={`w-full text-left px-3 py-2 ${editMode ? "pr-12" : "pr-7"} active:scale-95 transition-transform disabled:active:scale-100`}
       >
         <div className="flex items-center gap-2">
           <span className={`w-2 h-2 rounded-full flex-shrink-0 ${activeColors.dot}`} />
@@ -792,7 +863,7 @@ function applyModifiers(base: string, discount: number | null, tax: number | nul
 }
 
 function PriceDetailSheet({
-  item, items, stores, categories, memoHistory, defaultStoreId, initialShowForm, onClose, onAddPrice, onDeleteEntry, onEditEntry, onDeleteItem, onChangeCategory, onRenameItem,
+  item, items, stores, categories, memoHistory, defaultStoreId, initialShowForm, onClose, onAddPrice, onDeleteEntry, onEditEntry, onDeleteItem, onChangeCategory, onRenameItem, onToggleFavorite,
 }: {
   item: Item;
   items: Item[];
@@ -808,6 +879,7 @@ function PriceDetailSheet({
   onDeleteItem: () => void;
   onChangeCategory: (categoryId: string) => void;
   onRenameItem: (name: string, categoryId: string) => void;
+  onToggleFavorite: () => void;
 }) {
   const [showForm,     setShowForm]     = useState(initialShowForm ?? false);
   const [storeId,      setStoreId]      = useState(defaultStoreId ?? (stores[0]?.id ?? ""));
@@ -960,6 +1032,11 @@ function PriceDetailSheet({
             </div>
           )}
           <div className="flex items-center gap-1 flex-shrink-0">
+            <button onClick={onToggleFavorite}
+              aria-label="お気に入り"
+              className={`p-1.5 transition-colors ${currentItem.favorite ? "text-amber-400" : "text-slate-300 dark:text-slate-600 hover:text-amber-300"}`}>
+              {currentItem.favorite ? <StarIconSolid className="h-4 w-4" /> : <StarIcon className="h-4 w-4" />}
+            </button>
             <button onClick={() => { if (!editingItem) { setEditItemName(currentItem.name); setEditItemCategoryId(currentItem.categoryId); } setEditingItem((v) => !v); }}
               className={`p-1.5 transition-colors ${editingItem ? "text-violet-500 dark:text-violet-400" : "text-slate-300 dark:text-slate-600 hover:text-violet-400 dark:hover:text-violet-400"}`}>
               <PencilIcon className="h-4 w-4" />
@@ -1838,12 +1915,14 @@ function SettingsDialog({
 }
 
 // ===================== StoreManagerDialog =====================
-function SortableStoreRow({ store, isEditing, editMemo, onEditMemoChange, onSaveMemo, onCancelEdit, onStartEdit, onDelete, onToggleFavorite }: {
+function SortableStoreRow({ store, isEditing, editName, editMemo, onEditNameChange, onEditMemoChange, onSave, onCancelEdit, onStartEdit, onDelete, onToggleFavorite }: {
   store: Store;
   isEditing: boolean;
+  editName: string;
   editMemo: string;
+  onEditNameChange: (v: string) => void;
   onEditMemoChange: (v: string) => void;
-  onSaveMemo: () => void;
+  onSave: () => void;
   onCancelEdit: () => void;
   onStartEdit: () => void;
   onDelete: () => void;
@@ -1874,15 +1953,23 @@ function SortableStoreRow({ store, isEditing, editMemo, onEditMemoChange, onSave
         </div>
       </div>
       {isEditing && (
-        <div className="mt-2 flex gap-2">
+        <div className="mt-2 space-y-2">
           <input
-            type="text" value={editMemo} onChange={(e) => onEditMemoChange(e.target.value)}
-            placeholder="例: 毎週水曜ポイント5倍"
-            onKeyDown={(e) => { if (e.key === "Enter") onSaveMemo(); if (e.key === "Escape") onCancelEdit(); }}
-            className="flex-1 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500"
+            type="text" value={editName} onChange={(e) => onEditNameChange(e.target.value)}
+            placeholder="店舗名"
+            onKeyDown={(e) => { if (e.key === "Enter") onSave(); if (e.key === "Escape") onCancelEdit(); }}
+            className="w-full border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500"
           />
-          <button onClick={onSaveMemo} className="px-2.5 py-1.5 rounded-lg bg-violet-500 text-white text-xs font-semibold">保存</button>
-          <button onClick={onCancelEdit} className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 text-xs text-slate-500 dark:text-slate-400">✕</button>
+          <div className="flex gap-2">
+            <input
+              type="text" value={editMemo} onChange={(e) => onEditMemoChange(e.target.value)}
+              placeholder="例: 毎週水曜ポイント5倍"
+              onKeyDown={(e) => { if (e.key === "Enter") onSave(); if (e.key === "Escape") onCancelEdit(); }}
+              className="flex-1 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500"
+            />
+            <button onClick={onSave} className="px-2.5 py-1.5 rounded-lg bg-violet-500 text-white text-xs font-semibold">保存</button>
+            <button onClick={onCancelEdit} className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 text-xs text-slate-500 dark:text-slate-400">✕</button>
+          </div>
         </div>
       )}
     </div>
@@ -1890,7 +1977,7 @@ function SortableStoreRow({ store, isEditing, editMemo, onEditMemoChange, onSave
 }
 
 function StoreManagerDialog({
-  stores, onClose, onAdd, onDelete, onReorder, onUpdateMemo, onToggleFavorite,
+  stores, onClose, onAdd, onDelete, onReorder, onUpdateMemo, onRename, onToggleFavorite,
 }: {
   stores: Store[];
   onClose: () => void;
@@ -1898,11 +1985,13 @@ function StoreManagerDialog({
   onDelete: (id: string) => void;
   onReorder: (stores: Store[]) => void;
   onUpdateMemo: (id: string, memo: string) => void;
+  onRename: (id: string, name: string) => void;
   onToggleFavorite: (id: string) => void;
 }) {
   const [newName, setNewName] = useState("");
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [editingMemoId, setEditingMemoId] = useState<string | null>(null);
+  const [editNameText, setEditNameText] = useState("");
   const [editMemoText, setEditMemoText] = useState("");
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -1945,10 +2034,17 @@ function StoreManagerDialog({
                     key={store.id}
                     store={store}
                     isEditing={editingMemoId === store.id}
+                    editName={editingMemoId === store.id ? editNameText : store.name}
                     editMemo={editingMemoId === store.id ? editMemoText : (store.memo ?? "")}
+                    onEditNameChange={setEditNameText}
                     onEditMemoChange={setEditMemoText}
-                    onStartEdit={() => { setEditingMemoId(store.id); setEditMemoText(store.memo ?? ""); }}
-                    onSaveMemo={() => { onUpdateMemo(store.id, editMemoText); setEditingMemoId(null); }}
+                    onStartEdit={() => { setEditingMemoId(store.id); setEditNameText(store.name); setEditMemoText(store.memo ?? ""); }}
+                    onSave={() => {
+                      const trimmed = editNameText.trim();
+                      if (trimmed && trimmed !== store.name) onRename(store.id, trimmed);
+                      onUpdateMemo(store.id, editMemoText);
+                      setEditingMemoId(null);
+                    }}
                     onCancelEdit={() => setEditingMemoId(null)}
                     onDelete={() => setConfirmDeleteId(store.id)}
                     onToggleFavorite={() => onToggleFavorite(store.id)}
@@ -2126,3 +2222,4 @@ function ShoppingListSheet({
     </div>
   );
 }
+
