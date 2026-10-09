@@ -815,9 +815,9 @@ function SortableItemCard({
       <button
         onClick={onClick}
         disabled={editMode}
-        className={`w-full text-left px-3 py-2 ${editMode ? "pr-12" : "pr-7"} active:scale-95 transition-transform disabled:active:scale-100`}
+        className={`w-full text-left px-3 py-2 ${editMode ? "pr-12" : "pr-3"} active:scale-95 transition-transform disabled:active:scale-100`}
       >
-        <div className="flex items-center gap-2">
+        <div className={`flex items-center gap-2 ${editMode ? "" : "pr-5"}`}>
           <span className={`w-2 h-2 rounded-full flex-shrink-0 ${activeColors.dot}`} />
           <span className="font-semibold text-slate-700 dark:text-slate-200 text-sm truncate flex-1">{item.name}</span>
         </div>
