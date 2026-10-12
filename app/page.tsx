@@ -272,7 +272,7 @@ export default function Home() {
               isActive ? colors.activeTab + " shadow-sm" : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:opacity-80"
             }`}
           >
-            <span>{cat.emoji}</span>
+            <span className="text-lg">{cat.emoji}</span>
             <span>{cat.name}</span>
             {isActive && (
               <span className="ml-auto text-xs opacity-70">{filteredItems.length}</span>
@@ -429,7 +429,7 @@ export default function Home() {
                       isActive ? colors.activeTab + " shadow-sm" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:opacity-80"
                     }`}
                   >
-                    <span>{cat.emoji}</span>
+                    <span className="text-xl">{cat.emoji}</span>
                     {isActive && <span className="text-xs">{cat.name}</span>}
                   </button>
                 );
@@ -1259,19 +1259,25 @@ function PriceDetailSheet({
                           {s.name}
                         </button>
                       ))}
-                      {stores.some((s) => !s.favorite) && (
-                        <div className="relative h-9">
-                          <select value={stores.find((s) => s.id === storeId)?.favorite ? "" : storeId}
-                            onChange={(e) => { if (e.target.value) setStoreId(e.target.value); }}
-                            className="h-9 w-full appearance-none border border-slate-200 dark:border-slate-600 rounded-2xl px-5 text-xs text-center focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-500 dark:text-slate-400">
-                            <option value="">その他...</option>
-                            {stores.filter((s) => !s.favorite).map((s) => (
-                              <option key={s.id} value={s.id}>{s.name}</option>
-                            ))}
-                          </select>
-                          <ChevronDownIcon className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400 dark:text-slate-500" />
-                        </div>
-                      )}
+                      {stores.some((s) => !s.favorite) && (() => {
+                        const otherStore = stores.find((s) => s.id === storeId && !s.favorite);
+                        return (
+                          <div className="relative h-9">
+                            <select value={otherStore ? otherStore.id : ""}
+                              onChange={(e) => { if (e.target.value) setStoreId(e.target.value); }}
+                              className="absolute inset-0 h-9 w-full opacity-0 cursor-pointer">
+                              <option value="">その他...</option>
+                              {stores.filter((s) => !s.favorite).map((s) => (
+                                <option key={s.id} value={s.id}>{s.name}</option>
+                              ))}
+                            </select>
+                            <div className="pointer-events-none h-9 w-full flex items-center justify-center gap-1 border border-slate-200 dark:border-slate-600 rounded-2xl px-5 text-xs text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-700">
+                              <span className="truncate">{otherStore ? otherStore.name : "その他..."}</span>
+                              <ChevronDownIcon className="h-3 w-3 flex-shrink-0 text-slate-400 dark:text-slate-500" />
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </div>
                   ) : (
                     <select value={storeId}
