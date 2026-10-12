@@ -676,8 +676,7 @@ export default function Home() {
           onAdd={(name) => updateSharedData({ stores: [...stores, { id: uid(), name }] })}
           onDelete={handleDeleteStore}
           onReorder={(reordered) => updateSharedData({ stores: reordered })}
-          onUpdateMemo={(id, memo) => updateSharedData({ stores: stores.map((s) => s.id === id ? { ...s, memo } : s) })}
-          onRename={(id, name) => updateSharedData({ stores: stores.map((s) => s.id === id ? { ...s, name } : s) })}
+          onEditStore={(id, name, memo) => updateSharedData({ stores: stores.map((s) => s.id === id ? { ...s, name, memo } : s) })}
           onToggleFavorite={(id) => updateSharedData({ stores: stores.map((s) => s.id === id ? { ...s, favorite: !s.favorite } : s) })}
         />
       )}
@@ -1933,12 +1932,21 @@ function SortableStoreRow({ store, isEditing, editName, editMemo, onEditNameChan
   return (
     <div ref={setNodeRef} style={style} className={`bg-slate-50 dark:bg-slate-700/50 rounded-xl px-3 py-2.5 ${isDragging ? "opacity-50 shadow-lg" : ""}`}>
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-2 min-w-0 flex-1">
           <button {...attributes} {...listeners} className="text-slate-300 dark:text-slate-600 hover:text-slate-400 cursor-grab active:cursor-grabbing touch-none p-0.5 shrink-0">
             <Bars3Icon className="h-4 w-4" />
           </button>
-          <div className="min-w-0">
-            <span className="text-sm text-slate-700 dark:text-slate-200">{store.name}</span>
+          <div className="min-w-0 flex-1">
+            {isEditing ? (
+              <input
+                type="text" value={editName} onChange={(e) => onEditNameChange(e.target.value)}
+                placeholder="店舗名" autoFocus
+                onKeyDown={(e) => { if (e.key === "Enter") onSave(); if (e.key === "Escape") onCancelEdit(); }}
+                className="w-full border border-slate-200 dark:border-slate-600 rounded-lg px-2 py-1 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500"
+              />
+            ) : (
+              <span className="text-sm text-slate-700 dark:text-slate-200">{store.name}</span>
+            )}
             {!isEditing && store.memo && (
               <p className="text-xs text-slate-400 dark:text-slate-500 truncate">{store.memo}</p>
             )}
@@ -1953,23 +1961,15 @@ function SortableStoreRow({ store, isEditing, editName, editMemo, onEditNameChan
         </div>
       </div>
       {isEditing && (
-        <div className="mt-2 space-y-2">
+        <div className="mt-2 flex gap-2">
           <input
-            type="text" value={editName} onChange={(e) => onEditNameChange(e.target.value)}
-            placeholder="店舗名"
+            type="text" value={editMemo} onChange={(e) => onEditMemoChange(e.target.value)}
+            placeholder="例: 毎週水曜ポイント5倍"
             onKeyDown={(e) => { if (e.key === "Enter") onSave(); if (e.key === "Escape") onCancelEdit(); }}
-            className="w-full border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500"
+            className="flex-1 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500"
           />
-          <div className="flex gap-2">
-            <input
-              type="text" value={editMemo} onChange={(e) => onEditMemoChange(e.target.value)}
-              placeholder="例: 毎週水曜ポイント5倍"
-              onKeyDown={(e) => { if (e.key === "Enter") onSave(); if (e.key === "Escape") onCancelEdit(); }}
-              className="flex-1 border border-slate-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-violet-300 dark:focus:ring-violet-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 placeholder:text-slate-300 dark:placeholder:text-slate-500"
-            />
-            <button onClick={onSave} className="px-2.5 py-1.5 rounded-lg bg-violet-500 text-white text-xs font-semibold">保存</button>
-            <button onClick={onCancelEdit} className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 text-xs text-slate-500 dark:text-slate-400">✕</button>
-          </div>
+          <button onClick={onSave} className="px-2.5 py-1.5 rounded-lg bg-violet-500 text-white text-xs font-semibold">保存</button>
+          <button onClick={onCancelEdit} className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-600 text-xs text-slate-500 dark:text-slate-400">✕</button>
         </div>
       )}
     </div>
@@ -1977,15 +1977,14 @@ function SortableStoreRow({ store, isEditing, editName, editMemo, onEditNameChan
 }
 
 function StoreManagerDialog({
-  stores, onClose, onAdd, onDelete, onReorder, onUpdateMemo, onRename, onToggleFavorite,
+  stores, onClose, onAdd, onDelete, onReorder, onEditStore, onToggleFavorite,
 }: {
   stores: Store[];
   onClose: () => void;
   onAdd: (name: string) => void;
   onDelete: (id: string) => void;
   onReorder: (stores: Store[]) => void;
-  onUpdateMemo: (id: string, memo: string) => void;
-  onRename: (id: string, name: string) => void;
+  onEditStore: (id: string, name: string, memo: string) => void;
   onToggleFavorite: (id: string) => void;
 }) {
   const [newName, setNewName] = useState("");
@@ -2040,9 +2039,8 @@ function StoreManagerDialog({
                     onEditMemoChange={setEditMemoText}
                     onStartEdit={() => { setEditingMemoId(store.id); setEditNameText(store.name); setEditMemoText(store.memo ?? ""); }}
                     onSave={() => {
-                      const trimmed = editNameText.trim();
-                      if (trimmed && trimmed !== store.name) onRename(store.id, trimmed);
-                      onUpdateMemo(store.id, editMemoText);
+                      const trimmed = editNameText.trim() || store.name;
+                      onEditStore(store.id, trimmed, editMemoText);
                       setEditingMemoId(null);
                     }}
                     onCancelEdit={() => setEditingMemoId(null)}
