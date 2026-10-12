@@ -255,7 +255,7 @@ export default function Home() {
           isFavoritesTab ? FAVORITES_COLORS.activeTab + " shadow-sm" : "bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 hover:opacity-80"
         }`}
       >
-        <StarIconSolid className="h-4 w-4" />
+        <StarIconSolid className="h-5 w-5" />
         <span>お気に入り</span>
         {isFavoritesTab && (
           <span className="ml-auto text-xs opacity-70">{filteredItems.length}</span>
@@ -414,7 +414,7 @@ export default function Home() {
                   isFavoritesTab ? FAVORITES_COLORS.activeTab + " shadow-sm" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:opacity-80"
                 }`}
               >
-                <StarIconSolid className="h-4 w-4" />
+                <StarIconSolid className="h-5 w-5" />
                 {isFavoritesTab && <span className="text-xs">お気に入り</span>}
               </button>
               {categories.map((cat) => {
